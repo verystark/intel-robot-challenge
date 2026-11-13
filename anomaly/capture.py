@@ -4,6 +4,7 @@ Shows a live feed with a centered green ROI box. Keys:
     g - save ROI crop to dataset/normal
     b - save ROI crop to dataset/abnormal
     t - save ROI crop to dataset/test_normal
+    + / - - make the ROI box bigger / smaller (keep it fixed once you start a dataset!)
     c - cycle to the next camera
     q / ESC - quit
 """
@@ -22,6 +23,8 @@ SAVE_KEYS = {
     ord("t"): "test_normal",
 }
 WINDOW = "Anomaly capture"
+ROI_STEP = 20
+ROI_MIN = 64
 
 
 def open_camera(index: int) -> cv2.VideoCapture | None:
@@ -62,7 +65,7 @@ def count_images(folder: Path) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--camera", type=int, default=0, help="initial camera index")
-    parser.add_argument("--roi", type=int, default=300, help="ROI square size in pixels")
+    parser.add_argument("--roi", type=int, default=400, help="ROI square size in pixels")
     parser.add_argument("--max-cameras", type=int, default=5, help="number of indices to scan when cycling")
     args = parser.parse_args()
 
@@ -78,6 +81,7 @@ def main() -> None:
         sys.exit("No camera could be opened.")
     print(f"Using camera {cam_idx}")
 
+    roi_size = args.roi
     status, status_until = "", 0.0
     try:
         while True:
@@ -90,14 +94,15 @@ def main() -> None:
                     sys.exit("No camera available.")
                 continue
 
-            x0, y0, x1, y1 = roi_rect(frame.shape, args.roi)
+            roi_size = max(ROI_MIN, min(roi_size, *frame.shape[:2]))
+            x0, y0, x1, y1 = roi_rect(frame.shape, roi_size)
             roi = frame[y0:y1, x0:x1].copy()
 
             display = frame.copy()
             cv2.rectangle(display, (x0, y0), (x1, y1), (0, 255, 0), 2)
-            info = f"cam {cam_idx} | " + "  ".join(f"{k}:{v}" for k, v in counts.items())
+            info = f"cam {cam_idx} | box {roi_size}px | " + "  ".join(f"{k}:{v}" for k, v in counts.items())
             cv2.putText(display, info, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            cv2.putText(display, "g=normal b=abnormal t=test_normal c=camera q=quit",
+            cv2.putText(display, "g=normal b=abnormal t=test_normal +/-=box c=camera q=quit",
                         (10, display.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             if time.time() < status_until:
                 cv2.putText(display, status, (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
@@ -106,7 +111,13 @@ def main() -> None:
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
                 break
-            if key == ord("c"):
+            if key in (ord("+"), ord("=")):
+                roi_size += ROI_STEP
+                status, status_until = f"Box size {roi_size}px", time.time() + 1.5
+            elif key in (ord("-"), ord("_")):
+                roi_size -= ROI_STEP
+                status, status_until = f"Box size {roi_size}px", time.time() + 1.5
+            elif key == ord("c"):
                 cap.release()
                 new_idx, new_cap = next_camera(cam_idx, args.max_cameras)
                 if new_cap is None:  # nothing else available, reopen the current one
