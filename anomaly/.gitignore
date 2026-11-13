@@ -1,0 +1,7 @@
+# Anomaly detection module
+dataset/
+exported_model/
+
+# Virtual environments
+*.venv/
+results/

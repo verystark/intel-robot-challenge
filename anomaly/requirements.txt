@@ -1,0 +1,4 @@
+anomalib[openvino,xpu]
+opencv-python
+numpy
+nncf
