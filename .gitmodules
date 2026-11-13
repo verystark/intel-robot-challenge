@@ -1,0 +1,3 @@
+[submodule "physical-ai-studio"]
+	path = physical-ai-studio
+	url = https://github.com/open-edge-platform/physical-ai-studio.git
