@@ -8,7 +8,8 @@ Run with Studio's backend Python from the repo root:
     $PY loop/show_tool.py save               # save them as the show pose        (read-only, safe)
     $PY loop/show_tool.py save --name via    # optional waypoint the loop passes through on the way
     $PY loop/show_tool.py goto               # move to the show pose             (MOVES THE ARM)
-    $PY loop/show_tool.py test-turn          # at the show pose: turn 180, back, 90, back  (MOVES)
+    $PY loop/show_tool.py save --name home   # save them as the home pose        (read-only, safe)
+    $PY loop/show_tool.py test-turn          # at the show pose: visit each wrist stop      (MOVES)
     $PY loop/show_tool.py collect            # inspection photos at the show pose          (MOVES)
 
 Saving the show pose: in Studio, teleoperate the follower so the brick sits in the middle of
@@ -16,12 +17,17 @@ capture.py's green box, close the Studio session (the follower keeps holding its
 then run `save`. `where` and `save` only read the servo positions, so the arm doesn't move
 and torque isn't touched; they refuse to run while Studio holds the port.
 
+Saving the home pose: put the follower where the sort episodes start (home, holding a brick) and
+run `save --name home`. Without it, run_cell.py uses the median start of the sort episodes.
+
 Collect mode: the tool moves to the show pose and opens the gripper. Put a brick between the
 jaws, gripped the way the robot grips it, then type g (good, training), t (good, test only) or
-b (defective) and Enter. The tool closes the gripper, takes a photo, turns the wrist 180 deg,
-takes a second photo, turns back and opens the gripper. Photos go to anomaly/dataset/<folder>
-(crop) and anomaly/dataset_full/<folder> (full frame), like capture.py, so recrop.py works.
-Close capture.py and inspect_live.py first: one program per camera.
+b (defective) and Enter. The tool closes the gripper and takes one photo at every wrist stop of
+cell_config.json (0, 90 and 180 deg, as far as the wrist's range allows, planned exactly as
+run_cell.py plans them), then turns back and opens the gripper. Anomalib must have seen every
+stop in training, or that view scores as defective. Photos go to anomaly/dataset/<folder>
+(crop, named ..._a<degrees>.png) and anomaly/dataset_full/<folder> (full frame), like
+capture.py, so recrop.py works. Close capture.py and inspect_live.py first: one program per camera.
 """
 
 from __future__ import annotations
@@ -51,7 +57,7 @@ from arm import (  # noqa: E402
     connect_follower,
     load_calibration,
     load_poses,
-    roll_target,
+    plan_stops,
     roll_units_per_degree,
     save_pose,
 )
@@ -59,6 +65,13 @@ from arm import (  # noqa: E402
 GRIP_OPEN = 40.0  # median opening before a grasp in main-clean2
 GRIP_CLOSED = 2.5  # commanded value while holding a brick in main-clean2 (the brick stops it ~3.7)
 FOLDERS = {"g": "normal", "t": "test_normal", "b": "abnormal"}
+CONFIG = HERE / "cell_config.json"
+
+
+def stops_from_config() -> list[float]:
+    import json
+
+    return [float(d) for d in json.loads(CONFIG.read_text())["show"]["stops_deg"]]
 
 
 def read_joints_readonly(calibration: dict) -> np.ndarray:
@@ -94,13 +107,13 @@ def describe(joints: np.ndarray) -> str:
 
 
 def check_turn(joints: np.ndarray, per_deg: float) -> None:
-    roll = float(joints[WRIST_ROLL])
-    for degrees in (180, 90):
-        target = roll_target(roll, degrees, per_deg)
-        state = f"ok (to {target:.0f})" if target is not None else "DOESN'T FIT"
-        print(f"  {degrees:3d} deg wrist turn from wrist_roll {roll:.0f}: {state}")
-    if roll_target(roll, 180, per_deg) is None:
-        print("  -> Turn the wrist a little before saving so 180 deg fits, or the loop will use 90 deg.")
+    """Print the wrist stops the loop would use from this pose."""
+    asked = stops_from_config()
+    stops = plan_stops(float(joints[WRIST_ROLL]), asked, per_deg)
+    print(f"  Wrist stops from wrist_roll {joints[WRIST_ROLL]:.0f}: " + ", ".join(st.name for st in stops))
+    if any(abs(st.deg - st.asked_deg) > 1 for st in stops):
+        print(f"  (asked for {', '.join(f'{d:.0f}°' for d in asked)}: the wrist's range caps the largest; "
+              "turning the wrist a few units away from 0 before saving gives the full angle)")
 
 
 def confirm() -> None:
@@ -168,14 +181,16 @@ def cmd_test_turn(args) -> None:
     try:
         goto(arm, poses["show"])
         show = arm.joints()
-        for degrees in (180, 90):
+        for stop in plan_stops(float(show[WRIST_ROLL]), stops_from_config(), per_deg)[1:]:
+            target = show.copy()
+            target[WRIST_ROLL] = stop.roll
             try:
-                print(f"Turning {degrees} deg...")
-                arm.turn_wrist(degrees, per_deg, speed=45)
+                print(f"Turning to the {stop.name} stop...")
+                arm.move_to(target, speed=45)
                 time.sleep(0.5)
-                arm.move_to(show, speed=45)
             except ArmError as error:
-                print(f"  {degrees} deg failed: {error}")
+                print(f"  {stop.name} failed: {error}")
+        arm.move_to(show, speed=45)
         print("Done. Check the wrist camera's cable didn't pull.")
     finally:
         arm.robot.disconnect()
@@ -215,17 +230,19 @@ def cmd_collect(args) -> None:
             base[GRIPPER] = GRIP_CLOSED
             stamp = time.strftime("%Y%m%d_%H%M%S") + f"_{int(time.time() * 1000) % 1000:03d}"
             views = []
-            frame, crop = camera.photo()
-            views.append((frame, crop))
-            try:
-                arm.turn_wrist(args.turn, per_deg, speed=90)
+            for stop in plan_stops(float(base[WRIST_ROLL]), stops_from_config(), per_deg):
+                target = base.copy()
+                target[WRIST_ROLL] = stop.roll
+                try:
+                    arm.move_to(target, speed=90)
+                except ArmError as error:
+                    print(f"  The {stop.name} stop failed ({error}): skipping it")
+                    continue
                 frame, crop = camera.photo()
-                views.append((frame, crop))
-            except ArmError as error:
-                print(f"  Wrist turn failed ({error}): saving one view")
+                views.append((stop, frame, crop))
             arm.move_to(base, speed=90)
-            for i, (frame, crop) in enumerate(views, start=1):
-                name = f"{folder}_{stamp}_v{i}"
+            for stop, frame, crop in views:
+                name = f"{folder}_{stamp}_a{stop.deg:.0f}"
                 (dataset / folder).mkdir(parents=True, exist_ok=True)
                 (full / folder).mkdir(parents=True, exist_ok=True)
                 cv2.imwrite(str(dataset / folder / f"{name}.png"), crop)
@@ -251,11 +268,10 @@ def main() -> None:
     p = sub.add_parser("goto", help="move to a saved pose")
     p.add_argument("--name", default="show")
     p.add_argument("--speed", type=float, default=30.0, help="units per second (default 30, slow)")
-    p = sub.add_parser("test-turn", help="at the show pose, turn the wrist 180 and 90 deg and back")
+    p = sub.add_parser("test-turn", help="at the show pose, visit each wrist stop and come back")
     p.add_argument("--speed", type=float, default=30.0)
     p = sub.add_parser("collect", help="inspection photos at the show pose")
     p.add_argument("--speed", type=float, default=40.0)
-    p.add_argument("--turn", type=float, default=180.0, help="degrees between the two views")
     args = parser.parse_args()
     {"where": cmd_where, "save": cmd_save, "goto": cmd_goto, "test-turn": cmd_test_turn,
      "collect": cmd_collect}[args.command](args)

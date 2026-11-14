@@ -202,3 +202,28 @@ Three commits on `main`, pushed as `6720e79..7c06559`:
 | `bench/RESULTS.md` | Generated evidence table: latency, load, temperature, loop runs |
 | `anomaly/README.md` | The inspection tools, including the new ones |
 | `CLAUDE.md` | Guidance for Claude Code sessions in this repo |
+
+## Update, 2026-11-14 afternoon
+
+- **Anomalib runs on the GPU by default** (`c239919`): 18 ms vs 184 ms on the NPU, and the GPU is
+  free while the brick is shown. The NPU's job is the ACT pick.
+- **Inspection at three wrist stops:** 0°, 90° and 180°, all turned the same way. From a wrist
+  angle near 0 the 180° stop is capped at about 171°.
+  - Each stop takes 3 frames; its score is their median.
+  - A clearly defective stop rejects at once and skips the rest.
+  - Unsure stops get one second look; still unsure means defective.
+  - `show_tool.py collect` photographs the same stops (`..._a<degrees>.png`), so the training
+    photos match. Anomalib has to be trained on every stop's view, or that view scores as
+    defective.
+- **Coded home pose:** the loop moves home before each pick (if away) and after inspection,
+  before the sort.
+  - Every scripted move keeps the gripper at the policy's last commanded value, so the squeeze
+    on the brick doesn't change.
+  - The home pose is `show_tool.py save --name home`, else the median start of the sort
+    episodes.
+- **`--bands FILE`** lets the loop use other score bands (used to test the second look).
+- **Tested in simulation:** early reject, all three stops, and the second look.
+- **The detector is the open problem.** The model retrained at 14:24 with 25 defect photos scores
+  held-out good bricks at a median of 0.59, and defects at 0.84. With calibrated bands, 16 of 22
+  good bricks and 15 of 25 defects would fall in the unsure band, so nearly everything would be
+  rejected. The fix is more good photos taken by `collect` at the real stops, then retraining.

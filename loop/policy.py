@@ -98,6 +98,24 @@ def find_model(spec: str = "latest", backend: str = "openvino") -> ModelInfo:
     raise LookupError(f"No Studio model matching {spec!r} with an {backend} export")
 
 
+def sort_start_pose(dataset_dir: Path, pick_sentence: str) -> np.ndarray:
+    """Median joint pose at the start of the dataset's sort episodes: where the sort policy expects
+    to begin, holding the brick (used as the home pose when none is saved in poses.json)."""
+    import glob
+
+    import pandas as pd
+
+    tasks = dataset_tasks(dataset_dir)
+    columns = ["episode_index", "task_index", "observation.state"]
+    data = pd.concat([pd.read_parquet(f, columns=columns)
+                      for f in sorted(glob.glob(f"{dataset_dir}/data/*/*.parquet"))])
+    firsts = data.groupby("episode_index").first()
+    sort = firsts[[tasks[int(t)] != pick_sentence for t in firsts["task_index"]]]
+    if sort.empty:
+        raise LookupError(f"No sort episodes in {dataset_dir.name}")
+    return np.median(np.stack(sort["observation.state"].to_numpy()), axis=0).astype(np.float32)
+
+
 def list_models(backend: str = "openvino") -> list[ModelInfo]:
     db = _db()
     try:

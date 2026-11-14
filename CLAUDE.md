@@ -179,6 +179,15 @@ running, restart the backend: Ctrl+C, wait about 30 s, then start it again.
 - **Show and inspect are scripted** with `Arm.move_to`: eased, speed-limited, lag-checked moves
   to `poses.json`. `send_action` jumps straight to the target, so never send far targets
   directly.
+  - Inspection stops at the wrist angles in `show.stops_deg` (0/90/180). `arm.plan_stops`
+    caps them at the joint range; `show_tool.py collect` uses the same plan, so training
+    photos match.
+  - Each stop's score is the median of 3 frames. A defective stop rejects at once; unsure
+    stops get one second look.
+  - Scripted moves set the gripper to `Cell.grip`, the policy's last commanded value (the
+    squeeze), never the measured one.
+  - The home pose is `poses.json` `home`, else the median sort-episode start
+    (`policy.sort_start_pose`).
 - **Stage-end detection** (`StageWatcher`): moved more than 40 units away, back within 45 of the
   start pose, still for 0.5 s. The gripper value can't tell holding from empty with this
   calibration.

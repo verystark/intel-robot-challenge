@@ -14,12 +14,14 @@ loop logs. Quote that file, not this one.
 ## 1. The system in one paragraph
 
 An SO-101 arm picks a Duplo brick with a vision-language-action policy trained in Physical AI
-Studio. A script then holds the brick in front of an inspection webcam and turns it to show two
-sides. Anomalib (PatchCore) scores both views and draws a heatmap. The verdict becomes the
+Studio. A script then holds the brick in front of an inspection webcam and turns it through three
+wrist stops (0°, 90°, 180°). Anomalib (PatchCore) scores each stop and draws a heatmap; a clear
+defect at any stop rejects the brick at once. The verdict becomes the
 sentence the VLA is given next: *"The brick is good. Put it on the green plate."* or *"The brick
 is defective. Put it on the orange plate."* The VLA puts the brick on that plate.
 
-Unsure bricks get a third look, and a brick that is still unsure is rejected. Every model runs on
+Unsure stops get a second look, and a brick that is still unsure is rejected. The scripted moves
+keep the policy's grip on the brick, and a scripted move home hands it back to the VLA. Every model runs on
 the laptop with OpenVINO, each on the device that suits it, and a live screen shows every
 decision and timing.
 
@@ -29,7 +31,7 @@ decision and timing.
 PERCEIVE                DETECT                  REASON                   ACT                     OPTIMIZE
 top RealSense  ─┐       inspection webcam ──▶   verdict ──▶ sentence ──▶ SmolVLA sort           OpenVINO everywhere
 wrist camera   ─┴──▶ pick policy (SmolVLA      PatchCore score +        "…defective. Put it      device per model by
-                     or ACT) ──▶ SO-101         heatmap, 2-3 views       on the orange plate."    measurement, INT8,
+                     or ACT) ──▶ SO-101         heatmap, 3 stops         on the orange plate."    measurement, INT8,
                      picks the brick            (GPU, while the arm      ──▶ SO-101 sorts         zero-noise SmolVLA,
                      scripted show pose ──▶     turns the brick)                                  async chunks
 ```
@@ -37,7 +39,7 @@ wrist camera   ─┴──▶ pick policy (SmolVLA      PatchCore score +      
 | Stage | What runs | Where | Why there |
 |---|---|---|---|
 | Pick | SmolVLA `Pick up the brick.` (or ACT, `--pick-model latest:act`) | GPU (ACT: NPU) | SmolVLA needs the GPU: 214 ms per chunk, it won't compile for the NPU, and the CPU takes 4.8 s. ACT runs as fast on the NPU (17 ms) as on the GPU (15 ms). |
-| Show | Scripted, eased joint move to a saved pose; wrist turns 180° | CPU | The photo must be taken from the same pose every time. Anomalib flags anything that differs from its training photos (`ANOMALY_DATA_REVIEW.md`). |
+| Show | Scripted, eased joint move to a saved pose; wrist stops at 0°, 90°, 180°; then home, grip kept | CPU | The photo must be taken from the same pose every time. Anomalib flags anything that differs from its training photos (`ANOMALY_DATA_REVIEW.md`). |
 | Inspect | Anomalib PatchCore, heatmap, good / unsure / defective bands | GPU | 18 ms per photo vs 184 ms on the NPU and 56 ms on the CPU. Its scores are also closest to FP32 on the CPU. The GPU is free then: no policy runs while the brick is shown. |
 | Sort | The same SmolVLA, with the verdict in the sentence | GPU | The VLA reads the verdict. The sentence is the "structured signal" the brief asks for. |
 | Measure | `bench/sysmon.py`: temperature, CPU / GPU / NPU busy, power | – | Judges want evidence. |
@@ -56,10 +58,10 @@ which one counts; the design covers both.
 | Criterion (PDF) | Pts | What we show | Evidence |
 |---|---|---|---|
 | End-to-end physical AI solution | 25 | One program runs pick → inspect → sort in a loop. Nobody chooses anything. | Live run; `loop/runs/*/cycles.jsonl` |
-| Defect detection with Anomalib | 20 | PatchCore with two views per brick, a heatmap, three score bands and a re-check. The verdict reaches the robot as the sentence. | The screen: photos, heatmaps, score bar, the sentence sent |
+| Defect detection with Anomalib | 20 | PatchCore at three wrist stops per brick (median of 3 frames each), a heatmap, three score bands, early reject and a second look. The verdict reaches the robot as the sentence. | The screen: photos, heatmaps, score bar, the sentence sent |
 | VLA & Physical AI Studio | 20 | SmolVLA trained in Studio on our teleop data. One model, three sentences; the verdict changes what it is told. | Studio datasets and models; the sentence on screen |
 | OpenVINO & Core Ultra | 20 | Every model in OpenVINO. Device chosen by measurement. INT8 Anomalib (4× smaller). Anomalib trained on the Intel GPU (Intel GPU 2.7 min vs CPU 12–17 min for the slowest step). | `bench/RESULTS.md` |
-| Robotic execution & reliability | 10 | Recovery from uncertain detections: unsure → turn 90°, look again → reject if still unsure. Stage timeouts; a stop key. | Re-check count on the screen and in the log |
+| Robotic execution & reliability | 10 | Recovery from uncertain detections: unsure stops get a second look → reject if still unsure. Stage timeouts; a stop key. | Re-check count on the screen and in the log |
 | Innovation & demo clarity | 5 | The live screen. Zero-noise SmolVLA for smooth motion. Inspection hidden behind arm motion. | This file, the screen |
 
 | Criterion (JUNCTION2026.md) | Pts | Our answer |
@@ -68,7 +70,7 @@ which one counts; the design covers both.
 | Intel tech integration | 25 | OpenVINO for all models, each on the device measured best for it: SmolVLA and Anomalib on the GPU, ACT on the NPU; Studio for data and training |
 | Dataset & pipeline quality | 20 | Raw `main` kept, cleaned copies `main-clean*` relabelled by script, episode review |
 | System efficiency | 20 | Latency per step and per cycle, temperature, GPU/NPU load, power: `bench/RESULTS.md` |
-| Creativity | 10 | Verdict-in-the-sentence, two-view inspection with re-check, scoring done while the arm turns the brick |
+| Creativity | 10 | Verdict-in-the-sentence, three-stop inspection with early reject and second look, scoring done while the arm turns the brick |
 
 ## 4. The moment a training run finishes
 
@@ -126,12 +128,12 @@ To use ACT for the pick: add `--pick-model <ACT name> --pick-device NPU`.
 2. **Start** `run_cell.py`. While it picks: "SmolVLA sees the top and wrist cameras and was told
    'Pick up the brick.' It runs on the laptop's GPU with OpenVINO, at about N ms per action chunk
    (RESULTS.md)."
-3. **Show and inspect:** "A script holds the brick at a fixed pose. Anomalib looks at two sides
-   while the wrist turns. It runs on the GPU in about 18 ms a photo, while the arm is still moving.
+3. **Show and inspect:** "A script holds the brick at a fixed pose and turns it through three
+   stops. Anomalib scores each stop while the wrist turns to the next; a clear defect stops the turn. It runs on the GPU in about 18 ms a photo, while the arm is still moving.
    The heatmap shows where it thinks the defect is."
 4. **The verdict sentence:** point at "Sent to SmolVLA". "The verdict is not a hard-coded motion.
    It's what we tell the VLA, and the same model then chooses the plate."
-5. **A defective brick and an unsure one:** show the re-check, "reject when in doubt".
+5. **A defective brick and an unsure one:** show the early reject and the second look, "reject when in doubt".
 6. **Numbers:** RESULTS.md on screen. Latency per model and device, cycle time, temperature and
    load. INT8 Anomalib at a quarter of the size, with scores within about 0.06.
 7. **Q&A.**
@@ -146,7 +148,7 @@ To use ACT for the pick: add `--pick-model <ACT name> --pick-device NPU`.
 - *Why isn't Anomalib on the NPU?* We measured it: 184 ms on the NPU vs 18 ms on the GPU, and no
   policy needs the GPU while the brick is shown. The NPU runs the ACT pick instead, where it
   matches the GPU (17 vs 15 ms). The bench table shows every model on every device.
-- *What about uncertain detections?* Two views, a third on unsure, reject if still unsure. The
+- *What about uncertain detections?* Three stops, a second look at unsure ones, reject if still unsure. The
   bands come from held-out good photos and real defects (`calibrate_bands.py`).
 
 ## 6. When something goes wrong

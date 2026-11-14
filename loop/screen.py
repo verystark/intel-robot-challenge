@@ -4,7 +4,7 @@ Drawn with OpenCV from a View snapshot, so it never touches the hardware. Layout
 
     header: model + devices, cycle, run state
     left:   live camera (top camera while the policy runs, inspection camera while showing)
-            stage strip PICK > SHOW > INSPECT > SORT with times
+            stage strip PICK > SHOW > INSPECT > HOME > SORT with times
     right:  verdict banner, the sentence sent to SmolVLA, inspection photos with heatmaps,
             score bar with the good / unsure / defective bands
     bottom: last cycle's timings, latency per model and device, temperature and loads, tallies
@@ -25,7 +25,7 @@ PANEL = (38, 38, 44)
 TEXT = (235, 235, 235)
 DIM = (150, 150, 155)
 COLOURS = {"GOOD": (60, 180, 60), "DEFECTIVE": (40, 40, 220), "UNSURE": (0, 170, 240), "": (90, 90, 90)}
-STAGES = ("PICK", "SHOW", "INSPECT", "SORT")
+STAGES = ("PICK", "SHOW", "INSPECT", "HOME", "SORT")
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 
@@ -36,6 +36,7 @@ class Photo:
     score: float | None = None
     label: str = ""
     ms: float | None = None
+    name: str = ""
 
 
 @dataclass
@@ -181,7 +182,7 @@ def render(view: View) -> np.ndarray:
 
     # Stage strip
     sy = ly + lh + 14
-    bw = (lw - 3 * 10) // 4
+    bw = (lw - (len(STAGES) - 1) * 10) // len(STAGES)
     for i, name in enumerate(STAGES):
         x = lx + i * (bw + 10)
         active = v.stage == name
@@ -213,7 +214,8 @@ def render(view: View) -> np.ndarray:
             lab_colour = COLOURS.get(photo.label, DIM)
             cv2.rectangle(img, (x, py + ps), (x + ps, py + ps + 30), lab_colour, -1)
             score = f"{photo.score:.2f}" if photo.score is not None else "scoring..."
-            _text(img, f"view {i + 1}: {score} {photo.label}", (x + 6, py + ps + 21), 0.5, (255, 255, 255), 1)
+            _text(img, f"{photo.name or f'view {i + 1}'}: {score} {photo.label}", (x + 6, py + ps + 21), 0.5,
+                  (255, 255, 255), 1)
         else:
             cv2.rectangle(img, (x, py), (x + ps, py + ps), PANEL, -1)
 

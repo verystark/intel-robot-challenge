@@ -1,16 +1,21 @@
 """The closed loop: pick -> show -> inspect -> sort, with the Anomalib verdict steering SmolVLA.
 
 Each cycle:
-  1. PICK     SmolVLA, "Pick up the brick.", until the arm has gone out, come back and held still.
-  2. SHOW     Scripted: smooth move to the saved show pose (loop/poses.json), keeping the grip.
-  3. INSPECT  Photo, wrist turn 180 deg, photo, turn back. Anomalib scores each photo in the
-              background (on the GPU by default) while the arm moves. Either view defective ->
-              DEFECTIVE; both good -> GOOD; otherwise UNSURE -> turn 90 deg, third photo,
-              which decides: good -> GOOD, still unsure -> DEFECTIVE (reject when in doubt).
-  4. SORT     Back to where the pick ended (where sort episodes start), then SmolVLA with the
-              verdict's sentence, until it has gone out, come back and held still.
-  5. LOG      Every stage time, every policy inference latency, every score, the photos and
+  0. HOME     If the arm isn't at the home pose, a scripted move there (the pick episodes start there).
+  1. PICK     The pick policy, "Pick up the brick.", until the arm has gone out, come back and held still.
+  2. SHOW     Scripted: smooth move to the saved show pose (loop/poses.json).
+  3. INSPECT  Photos at wrist stops 0, 90 and 180 deg (as far as the wrist's range allows), 3 frames
+              each; a stop's score is the median of its frames. Each stop is scored on the GPU while
+              the wrist turns to the next. Any stop clearly defective -> DEFECTIVE at once; all clearly
+              good -> GOOD; otherwise a second look at the unsure stops; still unsure -> DEFECTIVE.
+  4. HOME     Scripted move back to the home pose, where the sort episodes start.
+  5. SORT     The sort policy with the verdict's sentence, until it has gone out, come back and held still.
+  6. LOG      Every stage time, every policy inference latency, every score, the photos and
               heatmaps, temperatures and loads: loop/runs/<time>/cycles.jsonl.
+
+Every scripted move keeps the gripper at the value the policy last commanded, so the squeeze on
+the brick never changes. The home pose is the saved `home` in loop/poses.json, or else where the
+sort model's dataset episodes start.
 
 Run it with Studio's backend Python (it has physicalai and the SO-101 driver):
 
@@ -52,6 +57,7 @@ sys.path.insert(0, str(REPO / "anomaly"))
 
 from arm import (  # noqa: E402
     GRIPPER,
+    WRIST_ROLL,
     Arm,
     ArmError,
     MockRobot,
@@ -59,10 +65,12 @@ from arm import (  # noqa: E402
     Stopped,
     connect_follower,
     load_calibration,
+    Stop,
     load_poses,
+    plan_stops,
     roll_units_per_degree,
 )
-from detector import DEFECTIVE, GOOD, UNSURE, heatmap_overlay, label, load_bands, verdict  # noqa: E402
+from detector import DEFECTIVE, GOOD, UNSURE, heatmap_overlay, label, load_bands  # noqa: E402
 from inspection import InspectionCamera, ReplayInspectionCamera, Scorer  # noqa: E402
 from policy import (  # noqa: E402
     ReplayCamera,
@@ -73,6 +81,7 @@ from policy import (  # noqa: E402
     SwitchSource,
     find_model,
     load_policy,
+    sort_start_pose,
 )
 from screen import Photo, View, Window, render  # noqa: E402
 from sysmon import SysMon, SysMonThread  # noqa: E402
@@ -169,6 +178,12 @@ class Cell:
         else:
             raise SystemExit("No show pose saved. Run: loop/show_tool.py save   (see loop/README.md)")
         self.via_pose = poses.get("via")
+        if "home" in poses:
+            self.home_pose = poses["home"]
+        else:
+            self.home_pose = sort_start_pose(self.models["sort"].dataset_dir, sentences["pick"])
+            self.say(f"No saved home pose: using where the sort episodes start in {self.models['sort'].dataset_name}")
+        self.grip = float(self.arm.joints()[GRIPPER])
 
         # Policy
         self.watcher = StageWatcher()
@@ -219,8 +234,9 @@ class Cell:
         model_xml = REPO / (args.anomaly_model or cfg["anomaly_model"])
         self.say(f"Loading Anomalib on {args.anomaly_device}...")
         self.scorer = Scorer(model_xml, args.anomaly_device)
-        self.bands = load_bands()
-        bands_info = json.loads((REPO / "anomaly/bands.json").read_text()) if (REPO / "anomaly/bands.json").exists() else {}
+        bands_path = Path(args.bands) if args.bands else REPO / "anomaly/bands.json"
+        self.bands = load_bands(bands_path)
+        bands_info = json.loads(bands_path.read_text()) if bands_path.exists() else {}
         if bands_info.get("device") and bands_info["device"] != args.anomaly_device:
             self.say(f"Note: bands were calibrated on {bands_info['device']}, Anomalib runs on {args.anomaly_device}")
 
@@ -236,7 +252,8 @@ class Cell:
             "models": {stage: {"name": m.name, "id": m.model_id, "policy": m.policy, "export": str(m.export_dir),
                                "dataset": m.dataset_name} for stage, m in self.models.items()},
             "bands": {"low": self.bands.low, "high": self.bands.high, "source": self.bands.source},
-            "show_pose": [float(x) for x in self.show_pose], "anomaly_model": str(model_xml),
+            "show_pose": [float(x) for x in self.show_pose], "home_pose": [float(x) for x in self.home_pose],
+            "anomaly_model": str(model_xml),
         }, indent=2, default=str) + "\n")
         self.sysmon.start()
         self.say(f"Ready. Logging to {self.run_dir.relative_to(REPO)}")
@@ -263,10 +280,31 @@ class Cell:
     def rules(self, name: str) -> StageRules:
         return replace(StageRules(), **self.cfg[name])
 
-    def commanded_grip(self) -> float:
-        """The gripper value the policy last commanded (squeezing the brick), not the measured one."""
+    def keep_grip(self, pose: np.ndarray) -> np.ndarray:
+        """`pose` with the gripper at the value last COMMANDED (self.grip), not the measured one.
+
+        Holding a brick, the jaws stop short of their command (the brick is in the way); that gap is
+        the squeeze. Commanding the measured position would relax the grip and could drop the brick.
+        """
+        target = np.asarray(pose, dtype=np.float32).copy()
+        target[GRIPPER] = self.grip
+        return target
+
+    def take_grip_from_policy(self) -> None:
         last = self.watcher._last_action
-        return float(last[GRIPPER]) if last is not None else float(self.arm.joints()[GRIPPER])
+        if last is not None:
+            self.grip = float(last[GRIPPER])
+
+    def go_home(self, only_if_away: bool = False) -> float:
+        """Scripted move to the home pose, gripper unchanged. Returns the seconds it took."""
+        if only_if_away:
+            away = float(np.max(np.abs(self.arm.joints()[:5] - self.home_pose[:5])))
+            if away <= float(self.cfg["home_tol"]):
+                return 0.0
+        t0 = time.monotonic()
+        self.set_stage("HOME")
+        self.arm.move_to(self.keep_grip(self.home_pose))
+        return time.monotonic() - t0
 
     def run_stage(self, name: str, sentence: str, rules: StageRules) -> tuple[str, float, list[float]]:
         if self.args.sim:
@@ -292,72 +330,115 @@ class Cell:
         self.view.set(policy_ms=self.all_policy_ms[-300:])
         return result, took, ms
 
-    def photo(self, index: int, future_list: list, photos: list[Photo]) -> None:
-        frame, crop = self.inspection.photo()
-        photos.append(Photo(crop=crop))
+    def shoot(self, stop: Stop, photos: list[Photo], index: int | None = None) -> dict:
+        """Take frames_per_stop fresh frames at this stop and queue them for scoring."""
+        crops, futures = [], []
+        for _ in range(int(self.cfg["show"]["frames_per_stop"])):
+            _, crop = self.inspection.photo()
+            crops.append(crop)
+            futures.append(self.scorer.submit(crop))
+        tile = Photo(crop=crops[0], name=stop.name)
+        if index is None:
+            photos.append(tile)
+            index = len(photos) - 1
+        else:
+            photos[index] = tile
         self.view.set(photos=list(photos))
-        future_list.append(self.scorer.submit(crop))
+        return {"stop": stop, "crops": crops, "futures": futures, "index": index}
 
-    def collect_scores(self, futures: list, photos: list[Photo], start: int = 0) -> list[float]:
-        scores = []
-        for i, future in enumerate(futures[start:], start=start):
-            score, heat, ms = future.result(timeout=30)
-            photos[i] = Photo(crop=photos[i].crop, heat_overlay=heatmap_overlay(photos[i].crop, heat),
-                              score=score, label=label(score, self.bands), ms=ms)
-            scores.append(score)
-            self.all_anomaly_ms.append(ms)
+    def finish(self, entry: dict, photos: list[Photo]) -> str:
+        """Wait for a stop's scores: its score is the median of its frames."""
+        out = [f.result(timeout=30) for f in entry["futures"]]
+        scores = [o[0] for o in out]
+        median = float(np.median(scores))
+        i = int(np.argmin([abs(x - median) for x in scores]))
+        ms = [o[2] for o in out]
+        self.all_anomaly_ms.extend(ms)
+        entry.update(scores=scores, median=median, label=label(median, self.bands), ms=ms)
+        crop = entry["crops"][i]
+        photos[entry["index"]] = Photo(crop=crop, heat_overlay=heatmap_overlay(crop, out[i][1]), score=median,
+                                       label=entry["label"], ms=float(np.median(ms)), name=entry["stop"].name)
         self.view.set(photos=list(photos), anomaly_ms=self.all_anomaly_ms[-300:])
-        return scores
+        return entry["label"]
 
-    # --- One cycle -------------------------------------------------------------------
+    def show_and_inspect(self) -> tuple[str, list[Photo], dict]:
+        """Show pose, then photos at each stop (0, 90, 180 deg by default).
 
-    def show_and_inspect(self, grip: float) -> tuple[str, list[Photo], bool]:
-        show = self.show_pose.copy()
-        show[GRIPPER] = grip
+        Each stop's frames are scored on the anomaly device while the wrist turns to the next
+        stop. Any stop clearly defective -> DEFECTIVE at once (the remaining stops are skipped).
+        All clearly good -> GOOD. Otherwise one second look at the unsure stops; still unsure ->
+        DEFECTIVE (reject when in doubt).
+        """
+        show_cfg = self.cfg["show"]
+        speed = float(show_cfg["turn_speed"])
+        show = self.keep_grip(self.show_pose)
         self.set_stage("SHOW")
+        t0 = time.monotonic()
         if self.via_pose is not None:
-            via = self.via_pose.copy()
-            via[GRIPPER] = grip
-            self.arm.move_to(via)
+            self.arm.move_to(self.keep_grip(self.via_pose))
         self.arm.move_to(show)
-        self.show_move_s = time.monotonic() - self.view.stage_started
+        self.show_move_s = time.monotonic() - t0
         self.set_stage("INSPECT")
+        stops = plan_stops(float(show[WRIST_ROLL]), [float(d) for d in show_cfg["stops_deg"]], self.roll_per_deg)
+        if any(abs(st.deg - st.asked_deg) > 1 for st in stops):
+            self.say("Wrist range: stops at " + ", ".join(st.name for st in stops))
         photos: list[Photo] = []
-        futures: list = []
-        turn = float(self.cfg["show"]["turn_degrees"])
-        turn_speed = float(self.cfg["show"]["turn_speed"])
-        self.photo(0, futures, photos)
-        try:
-            self.arm.turn_wrist(turn, self.roll_per_deg, speed=turn_speed)
-        except ArmError:
-            turn = 90.0
-            self.say("180 deg doesn't fit at this wrist angle: turning 90 deg instead")
-            self.arm.turn_wrist(turn, self.roll_per_deg, speed=turn_speed)
-        self.photo(1, futures, photos)
-        self.arm.move_to(show, speed=turn_speed)
-        scores = self.collect_scores(futures, photos)
-        result = verdict(scores, self.bands)
-        rechecked = False
-        if result == UNSURE:
-            rechecked = True
+        entries: list[dict] = []
+        early = False
+
+        def at(stop: Stop) -> np.ndarray:
+            target = show.copy()
+            target[WRIST_ROLL] = stop.roll
+            return target
+
+        for k, stop in enumerate(stops):
+            if k > 0:
+                self.arm.move_to(at(stop), speed=speed)
+                if self.finish(entries[k - 1], photos) == DEFECTIVE:
+                    early = True
+                    self.say(f"Defective at {entries[k - 1]['stop'].name}: skipping the other stops")
+                    break
+            entries.append(self.shoot(stop, photos))
+        if not early:
+            self.finish(entries[-1], photos)
+
+        labels = [e["label"] for e in entries]
+        second_look = False
+        if DEFECTIVE in labels:
+            result = DEFECTIVE
+        elif all(lab == GOOD for lab in labels):
+            result = GOOD
+        else:
+            second_look = True
+            unsure = [e for e in entries if e["label"] == UNSURE]
             self.view.set(verdict=UNSURE)
-            self.say("Unsure: turning 90 deg for another look")
-            self.arm.turn_wrist(float(self.cfg["show"]["recheck_degrees"]), self.roll_per_deg, speed=turn_speed)
-            self.photo(2, futures, photos)
-            self.arm.move_to(show, speed=turn_speed)
-            scores += self.collect_scores(futures, photos, start=2)
-            # GUIDE2: any defective view rejects; otherwise the extra look decides, and a brick
-            # that is still unsure is rejected (reject when in doubt).
-            recheck = label(scores[-1], self.bands)
-            if DEFECTIVE in (label(x, self.bands) for x in scores):
+            self.say("Unsure at " + ", ".join(e["stop"].name for e in unsure) + ": second look")
+            for e in unsure:
+                self.arm.move_to(at(e["stop"]), speed=speed)
+                time.sleep(0.3)  # extra settling before the second look
+                again = self.shoot(e["stop"], photos, index=e["index"])
+                self.finish(again, photos)
+                e["first_median"] = e["median"]
+                e.update(scores=again["scores"], median=again["median"], label=again["label"], ms=again["ms"])
+            labels = [e["label"] for e in entries]
+            if DEFECTIVE in labels:
                 result = DEFECTIVE
-            elif recheck == GOOD:
+            elif all(lab == GOOD for lab in labels):
                 result = GOOD
-                self.say("Re-check looks good: accepting it")
+                self.say("Second look is good: accepting it")
             else:
                 result = DEFECTIVE
                 self.say("Still unsure: rejecting it (defective)")
-        return result, photos, rechecked
+        self.arm.move_to(show, speed=speed)  # wrist back before moving on
+        info = {
+            "stops": [{"deg": round(e["stop"].deg, 1), "scores": [round(x, 4) for x in e["scores"]],
+                       "median": round(e["median"], 4), "label": e["label"],
+                       **({"first_median": round(e["first_median"], 4)} if "first_median" in e else {})}
+                      for e in entries],
+            "early_reject": early, "second_look": second_look,
+            "anomaly_ms": [round(x, 1) for e in entries for x in e["ms"]],
+        }
+        return result, photos, info
 
     def cycle(self, n: int) -> None:
         sentences = self.cfg["sentences"]
@@ -368,9 +449,12 @@ class Cell:
         stage_times: dict[str, float] = {}
 
         if self.args.inspect_only:
-            grip = float(self.arm.joints()[GRIPPER])
-            pick_end = self.arm.joints()
+            # The brick was put in by hand: squeeze it with the closed-grip command.
+            self.grip = float(self.cfg["grip_closed"])
         else:
+            home_s = self.go_home(only_if_away=True)  # the pick episodes start at home
+            if home_s:
+                record["home_before_pick_s"] = round(home_s, 2)
             result, took, ms = self.run_stage("PICK", sentences["pick"], self.rules("pick"))
             record["pick"] = {"result": result, "s": round(took, 2), "inference_ms": _stats(ms),
                               "clamped_ticks": self.watcher.clamped}
@@ -384,31 +468,30 @@ class Cell:
                 self.say(f"Pick ended by {result}: check the brick, then press r to continue")
                 self._log(record)
                 raise Stopped(f"pick {result}")
-            pick_end = self.arm.joints()
-            grip = self.commanded_grip()
+            self.take_grip_from_policy()
+        record["grip"] = round(self.grip, 2)
 
         t_show = time.monotonic()
-        verdict_, photos, rechecked = self.show_and_inspect(grip)
-        record["inspect"] = {
-            "scores": [round(p.score, 4) for p in photos if p.score is not None],
-            "labels": [p.label for p in photos], "verdict": verdict_, "rechecked": rechecked,
-            "anomaly_ms": [round(p.ms, 1) for p in photos if p.ms is not None],
-            "device": self.args.anomaly_device, "bands": [self.bands.low, self.bands.high],
-        }
+        verdict_, photos, info = self.show_and_inspect()
+        inspect_s = time.monotonic() - t_show - self.show_move_s
+        record["inspect"] = {**info, "verdict": verdict_, "device": self.args.anomaly_device,
+                             "bands": [self.bands.low, self.bands.high]}
         sentence = sentences[verdict_]
         self.view.set(verdict=verdict_, sentence=sentence)
-        for i, p in enumerate(photos):
-            cv2.imwrite(str(self.run_dir / f"c{n:03d}_view{i + 1}.jpg"), p.crop)
+        for p in photos:
+            stem = f"c{n:03d}_{p.name.replace(' ', '')}"
+            cv2.imwrite(str(self.run_dir / f"{stem}.jpg"), p.crop)
             if p.heat_overlay is not None:
-                cv2.imwrite(str(self.run_dir / f"c{n:03d}_view{i + 1}_heat.jpg"), p.heat_overlay)
-
-        back = pick_end.copy()
-        back[GRIPPER] = grip
-        self.arm.move_to(back)
-        show_s = time.monotonic() - t_show
+                cv2.imwrite(str(self.run_dir / f"{stem}_heat.jpg"), p.heat_overlay)
         stage_times["SHOW"] = self.show_move_s
-        stage_times["INSPECT"] = show_s - self.show_move_s
-        record["show_s"] = round(show_s, 2)
+        stage_times["INSPECT"] = inspect_s
+        self.view.set(stage_times=dict(stage_times))
+
+        # Home, still squeezing: the sort episodes start at home holding the brick.
+        stage_times["HOME"] = self.go_home()
+        show_s = time.monotonic() - t_show
+        record.update(show_s=round(self.show_move_s, 2), inspect_s=round(inspect_s, 2),
+                      home_s=round(stage_times["HOME"], 2))
         self.view.set(stage_times=dict(stage_times))
 
         if not self.args.inspect_only:
@@ -416,6 +499,7 @@ class Cell:
             record["sort"] = {"result": result, "sentence": sentence, "s": round(took, 2),
                               "inference_ms": _stats(ms), "clamped_ticks": self.watcher.clamped}
             stage_times["SORT"] = took
+            self.take_grip_from_policy()
             if result == "stopped":
                 raise Stopped("stopped during sort")
             if result != "done":
@@ -426,7 +510,7 @@ class Cell:
         record["system"] = {k: (round(v, 1) if v is not None else None) for k, v in self.cycle_mon.sample().items()}
         tallies = dict(self.view.tallies)
         tallies[verdict_] = tallies.get(verdict_, 0) + 1
-        tallies["rechecks"] = tallies.get("rechecks", 0) + int(rechecked)
+        tallies["rechecks"] = tallies.get("rechecks", 0) + int(info["second_look"])
         self.set_stage("")
         self.view.set(
             stage_times=dict(stage_times), tallies=tallies,
@@ -559,6 +643,7 @@ def main() -> None:
     parser.add_argument("--sort-device", help="OpenVINO device for the sort policy (default from config: GPU)")
     parser.add_argument("--anomaly-device", help="OpenVINO device for Anomalib (default from config: GPU)")
     parser.add_argument("--anomaly-model", help="Anomalib model.xml, relative to the repo")
+    parser.add_argument("--bands", help="score bands file (default anomaly/bands.json, else 0.4 / 0.6)")
     parser.add_argument("--cycles", type=int, default=0, help="stop after this many cycles (0 = until stopped)")
     parser.add_argument("--sim", action="store_true", help="no hardware: mock arm, recorded camera frames and photos")
     parser.add_argument("--replay", action="store_true", help="with --sim: replay recorded actions instead of a model")

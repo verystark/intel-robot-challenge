@@ -14,7 +14,7 @@ PY=physical-ai-studio/application/backend/.venv/bin/python
 | `run_cell.py` | The loop, the demo screen and the log |
 | `show_tool.py` | `where` / `save` the show pose (read-only), `goto`, `test-turn`, `collect` photos |
 | `cell_config.json` | Models, devices, sentences, timeouts, show settings, camera ids |
-| `poses.json` | Saved poses (`show`, optional `via`), written by `show_tool.py save` |
+| `poses.json` | Saved poses (`show`, `home`, optional `via`), written by `show_tool.py save` |
 | `arm.py` | Follower: calibration from Studio's DB, Studio's device lock, smooth scripted moves, mock arm |
 | `policy.py` | Finding Studio models, zero-noise SmolVLA, "stage finished" detection, simulation |
 | `inspection.py` | Inspection webcam (same crop and settings as `capture.py`), background Anomalib scoring |
@@ -23,22 +23,44 @@ PY=physical-ai-studio/application/backend/.venv/bin/python
 
 ## One cycle
 
+0. **HOME.** If the arm isn't at the home pose (more than 8 units away), a scripted move there.
+   The pick episodes start at home.
 1. **PICK.** The pick policy, given `Pick up the brick.`, runs until the arm has moved well away
    (40 units), come back near where it started (45 units) and held still for 0.5 s. That's how
    87% of the recorded picks and 90% of the sorts in `main-clean2` end; the rule fired too early
    on only 3 of 158 picks. Timeout: 25 s, after which the loop stops and waits for `r`.
-2. **SHOW.** A scripted, eased move to the saved show pose. The grip the policy last commanded
-   is kept, so the brick isn't dropped.
-3. **INSPECT.** Photo, wrist turn 180° (90° if 180° doesn't fit the wrist's range), photo, turn
-   back. Anomalib scores photo 1 while the wrist turns, and photo 2 while it turns back.
-   - Either view defective → **DEFECTIVE**.
-   - Both views good → **GOOD**.
-   - Otherwise **UNSURE**: turn 90° and take a third photo. Any defective view → **DEFECTIVE**;
-     otherwise the third photo decides: good → **GOOD**, still unsure → **DEFECTIVE**.
-4. **SORT.** Back to where the pick ended (where the sort episodes start), then the sort policy
-   with `The brick is good. Put it on the green plate.` or `The brick is defective. Put it on the
-   orange plate.` It ends like a pick; timeout 15 s.
-5. **LOG.** Stage times, every inference latency, scores, photos and heatmaps, temperature and loads.
+2. **SHOW.** A scripted, eased move to the saved show pose.
+3. **INSPECT.** The wrist stops at 0°, 90° and 180° (`show.stops_deg` in `cell_config.json`).
+   - **Turn direction:** all stops turn the same way, the way with room. From a wrist angle
+     near 0 the 180° stop is capped by the joint's range (about 171° from −2.7).
+   - **Score per stop:** 3 fresh frames, scored on the GPU while the wrist turns to the next
+     stop. The stop's score is their median, so one glitchy frame can't decide.
+   - **Decision:**
+     - Any stop clearly defective → **DEFECTIVE** at once; the remaining stops are skipped.
+     - All stops clearly good → **GOOD**.
+     - Otherwise a **second look**: back to each unsure stop, settle, 3 new frames.
+       - Any defective → **DEFECTIVE**; all good → **GOOD**; still unsure → **DEFECTIVE**
+         (reject when in doubt).
+       - A full second look adds about 6 s, so it only pays when unsure is rare.
+   - **Training must cover every stop.** Anomalib has to have seen each stop's view in its good
+     photos, or that view scores as defective. `show_tool.py collect` photographs exactly
+     these stops.
+4. **HOME.** A scripted move back to the home pose, where the sort episodes start holding the
+   brick.
+5. **SORT.** The sort policy with `The brick is good. Put it on the green plate.` or `The brick
+   is defective. Put it on the orange plate.` It ends like a pick; timeout 15 s.
+6. **LOG.** Stage times, every inference latency, each stop's frame scores and median, photos and
+   heatmaps, temperature and loads.
+
+**The grip never changes during scripted moves.** Every scripted move (home, show, the stops) sets
+the gripper to the value the policy last commanded, not the value measured. Holding a brick, the
+jaws stop short of their command, and that gap is the squeeze; commanding the measured position
+would relax it. In `--inspect-only` the brick is put in by hand, so the gripper is commanded to
+`grip_closed` (2.5, the commanded value while holding a brick in `main-clean2`).
+
+**Home pose:** the saved `home` in `poses.json` (`show_tool.py save --name home`, with the arm
+where the sort episodes start). If none is saved, the loop uses the median start of the sort
+episodes in the sort model's dataset and says so.
 
 **Safety built in:**
 - Every policy action is limited to 12 units per tick. The limit starts at 2 units per tick and
@@ -68,10 +90,12 @@ PY=physical-ai-studio/application/backend/.venv/bin/python
 |---|---|---|---|
 | 1 | `$PY loop/run_cell.py --sim --replay --cycles 2` | No | The window opens and shows both stages, photos, heatmaps and timings |
 | 2 | `$PY loop/show_tool.py where` | No | Joint values look sane |
-| 3 | `$PY loop/show_tool.py save` | No | The show pose is saved; the 180° turn fits |
+| 3 | `$PY loop/show_tool.py save` | No | The show pose is saved; it prints the wrist stops it allows |
+| 3b | `$PY loop/show_tool.py save --name home` | No | With the arm at home holding a brick (optional: else the dataset's sort start is used) |
 | 4 | `$PY loop/show_tool.py goto` | **Yes**, slowly | It arrives at the show pose |
-| 5 | `$PY loop/show_tool.py test-turn` | **Yes** | The wrist turns 180° and 90° and back; the wrist-camera cable doesn't pull |
-| 6 | `$PY loop/run_cell.py --inspect-only` | **Yes** | With a brick put in the gripper, press space: show, two photos, verdict |
+| 5 | `$PY loop/show_tool.py test-turn` | **Yes** | The wrist visits every stop and comes back; the brick doesn't slip; the wrist-camera cable doesn't pull |
+| 5b | `$PY loop/show_tool.py collect` | **Yes** | Good and defective photos at every stop; then `train_export.py --int8` and `calibrate_bands.py` |
+| 6 | `$PY loop/run_cell.py --inspect-only` | **Yes** | With a brick put in the gripper, press space: show, the stops, verdict |
 | 7 | `$PY loop/run_cell.py --cycles 1` | **Yes** | One full cycle; keep a hand near Esc |
 | 8 | `$PY loop/run_cell.py` | **Yes** | The demo |
 
@@ -110,6 +134,7 @@ stops. In `--inspect-only`, `space` starts each cycle.
 - **`--sim`:** the real policy models run on the recorded camera frames. The frames don't react to
   the mock arm, so stages often end by timeout; this is for latency and plumbing, not behaviour.
 - **`--no-window --save-screens DIR`:** for headless tests, the screen is saved as images.
+- **`--bands FILE`:** use other score bands, e.g. a wide unsure band to exercise the second look.
 
 ## Known limits
 

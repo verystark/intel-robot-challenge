@@ -97,6 +97,43 @@ def roll_target(current_roll: float, degrees: float, units_per_deg: float) -> fl
 
 
 @dataclass
+class Stop:
+    """One inspection stop: the angle asked for, the angle the wrist can really reach, its roll target."""
+
+    asked_deg: float
+    deg: float
+    roll: float
+
+    @property
+    def name(self) -> str:
+        return f"{self.deg:.0f} deg"  # plain ASCII: OpenCV's screen font has no degree sign
+
+
+def plan_stops(show_roll: float, stops_deg: list[float], units_per_deg: float, margin: float = 2.0) -> list[Stop]:
+    """Wrist-roll targets for the inspection stops, all turned the same way from the show pose.
+
+    The direction is the one with room for the largest stop; if neither has room (a show pose
+    with wrist_roll near 0 can't turn a full 180 deg either way), the largest stops are capped
+    at the joint's range, e.g. about 173 deg from a roll of -2. run_cell.py and show_tool.py's
+    collect mode both use this, so training photos and live photos come from the same angles.
+    """
+    lo, hi = -100 + margin, 100 - margin
+    need = max(abs(d) for d in stops_deg) * units_per_deg
+    room_up, room_down = hi - show_roll, show_roll - lo
+    if room_up >= need:
+        sign = 1
+    elif room_down >= need:
+        sign = -1
+    else:
+        sign = 1 if room_up >= room_down else -1
+    stops = []
+    for asked in stops_deg:
+        roll = float(np.clip(show_roll + sign * abs(asked) * units_per_deg, lo, hi))
+        stops.append(Stop(asked, abs(roll - show_roll) / units_per_deg, roll))
+    return stops
+
+
+@dataclass
 class MoveLimits:
     speed: float = 60.0  # normalized units per second, fastest joint
     min_time_s: float = 0.5
