@@ -1,0 +1,27 @@
+{
+  "pick_model": "latest:smolvla",
+  "sort_model": "latest:smolvla",
+  "pick_device": "GPU",
+  "sort_device": "GPU",
+  "anomaly_device": "NPU",
+  "anomaly_model": "anomaly/exported_model/weights/openvino/model.xml",
+  "execution": "async",
+  "request_threshold": 0.5,
+  "lerp_frames": 5,
+  "zero_noise": true,
+  "fps": 30,
+  "max_step_per_tick": 12.0,
+  "sentences": {
+    "pick": "Pick up the brick.",
+    "GOOD": "The brick is good. Put it on the green plate.",
+    "DEFECTIVE": "The brick is defective. Put it on the orange plate."
+  },
+  "pick": {"timeout_s": 25, "min_time_s": 1.5, "moved_away": 40, "still_speed": 15, "hold_s": 0.5, "return_tol": 45},
+  "sort": {"timeout_s": 15, "min_time_s": 1.0, "moved_away": 40, "still_speed": 15, "hold_s": 0.5, "return_tol": 45},
+  "show": {"turn_degrees": 180, "recheck_degrees": 90, "speed": 50, "turn_speed": 90, "settle_s": 0.35},
+  "cameras": {
+    "top": {"driver": "realsense", "serial_number": "243722061698"},
+    "wrist": {"driver": "uvc", "device": "/dev/v4l/by-id/usb-HBVCAM_Camera_Autodarts_DIY_Cam_HB20250300001-video-index0"},
+    "width": 640, "height": 480, "fps": 30
+  }
+}

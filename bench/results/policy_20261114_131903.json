@@ -1,0 +1,96 @@
+{
+  "time": "2026-11-14 13:19:03",
+  "model": "ACT-pick-v1",
+  "model_id": "d093c0c3-6299-4527-b4ea-f5c3904a5b63",
+  "dataset": "main-picks",
+  "iters": 8,
+  "background": {
+    "pkg_temp_c_mean": 72.4,
+    "pkg_temp_c_max": 73.0,
+    "cpu_pct_mean": 32.23231007886316,
+    "cpu_pct_max": 34.38287153652393,
+    "gpu_pct_mean": 99.96004255962876,
+    "gpu_pct_max": 100.0,
+    "npu_pct_mean": 0.0,
+    "npu_pct_max": 0.0,
+    "pkg_w_mean": null,
+    "pkg_w_max": null,
+    "battery_w_mean": null,
+    "battery_w_max": null
+  },
+  "contended": "GPU 100% busy before start; CPU 32% busy before start",
+  "rows": [
+    {
+      "device": "GPU",
+      "load_s": 2.1,
+      "median_ms": 10.7,
+      "p95_ms": 11.5,
+      "max_ms": 11.6,
+      "headroom": 72.2,
+      "chunk": [
+        100,
+        6
+      ],
+      "pkg_temp_c_mean": null,
+      "pkg_temp_c_max": null,
+      "cpu_pct_mean": null,
+      "cpu_pct_max": null,
+      "gpu_pct_mean": null,
+      "gpu_pct_max": null,
+      "npu_pct_mean": null,
+      "npu_pct_max": null,
+      "pkg_w_mean": null,
+      "pkg_w_max": null,
+      "battery_w_mean": null,
+      "battery_w_max": null
+    },
+    {
+      "device": "CPU",
+      "load_s": 0.9,
+      "median_ms": 164.2,
+      "p95_ms": 189.0,
+      "max_ms": 195.5,
+      "headroom": 4.4,
+      "chunk": [
+        100,
+        6
+      ],
+      "pkg_temp_c_mean": 69.2,
+      "pkg_temp_c_max": 70.0,
+      "cpu_pct_mean": 58.0,
+      "cpu_pct_max": 63.5,
+      "gpu_pct_mean": 99.9,
+      "gpu_pct_max": 100.0,
+      "npu_pct_mean": 0.0,
+      "npu_pct_max": 0.0,
+      "pkg_w_mean": null,
+      "pkg_w_max": null,
+      "battery_w_mean": null,
+      "battery_w_max": null
+    },
+    {
+      "device": "NPU",
+      "load_s": 2.7,
+      "median_ms": 12.7,
+      "p95_ms": 14.1,
+      "max_ms": 14.3,
+      "headroom": 59.2,
+      "chunk": [
+        100,
+        6
+      ],
+      "pkg_temp_c_mean": null,
+      "pkg_temp_c_max": null,
+      "cpu_pct_mean": null,
+      "cpu_pct_max": null,
+      "gpu_pct_mean": null,
+      "gpu_pct_max": null,
+      "npu_pct_mean": null,
+      "npu_pct_max": null,
+      "pkg_w_mean": null,
+      "pkg_w_max": null,
+      "battery_w_mean": null,
+      "battery_w_max": null
+    }
+  ]
+}
