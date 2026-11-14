@@ -1,6 +1,8 @@
 # Anomaly detection module
 dataset/
+dataset_full/
 exported_model/
+__pycache__/
 
 # Virtual environments
 *.venv/

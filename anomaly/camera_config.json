@@ -1,0 +1,21 @@
+{
+  "device": "/dev/v4l/by-id/usb-Webcam_Webcam_Audio_01.00.00-video-index0",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "controls": {
+    "auto_exposure": 1,
+    "white_balance_automatic": 0,
+    "focus_automatic_continuous": 0,
+    "power_line_frequency": 1,
+    "exposure_time_absolute": 330,
+    "gain": 16,
+    "white_balance_temperature": 4600,
+    "focus_absolute": 272
+  },
+  "box_center": [
+    969,
+    502
+  ],
+  "box_size": 500
+}
