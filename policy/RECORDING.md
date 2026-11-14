@@ -4,6 +4,11 @@ You are helping the team record the `cell-v1` dataset in Physical AI Studio on t
 repo at `~/intel-robot-challenge`). The full plan is in [GUIDE.md](../GUIDE.md) sections 5–7; this
 file is the short version for running a session. GUIDE.md wins if they disagree.
 
+> **Out of date for the recording itself: follow [GUIDE2.md](../GUIDE2.md) sections 4–7.** The pick
+> episode now ends with the brick lifted (sentence "Pick up the brick and lift it."), the move into the
+> green box happens between the episodes without recording, the Task box is never touched, and bowls
+> follow alternation rules instead of `layout.py`.
+
 ## Your role
 
 - **You prepare and check; people move the arm.** Two people record: **A** uses the leader arm and
@@ -27,8 +32,12 @@ cd ~/intel-robot-challenge && git pull
 
 ### 1. Check the follower arm (read-only, safe to run)
 ```bash
-cd ~/intel-robot-challenge && python3 tools/servo_check.py
+cd ~/intel-robot-challenge
+physical-ai-studio/application/backend/.venv/bin/python tools/servo_check.py           # follower
+physical-ai-studio/application/backend/.venv/bin/python tools/servo_check.py leader    # leader
 ```
+It needs Studio's backend Python (system `python3` has no `scservo_sdk`), and it refuses to run while
+a Studio session holds the arm, so run it before opening the recording view.
 Report any motor that is hot, weak, low on voltage or has errors. Fix before recording.
 
 ### 2. Start Studio (two long-running terminals)
@@ -81,6 +90,8 @@ One cycle = two episodes, back to back (don't put the brick down in between):
 | Episode 1, pick | **→** start → grab the brick → into the green box → hold still ~1 s → **→** accept | While it's held: `g` or `b` in `capture.py` (as `layout.py` says) |
 | Episode 2, sort | **→** start → named bowl → home → hold still ~1 s → **→** accept | Before: paste the sort sentence into Studio's Task box (click, Ctrl+A, Ctrl+V). After: paste the pick sentence back, then Enter in `layout.py` |
 
+- **The arrow keys do nothing while the cursor is in the Task box** (Studio ignores shortcuts while
+  you type). After pasting a sentence, click an empty part of the Studio page, then press **→**.
 - **←** discards. Discarded sort: bring the brick back to the green box without recording, redo it.
 - Enter in `layout.py` **only when both episodes are accepted**.
 - Every ~10 cycles: replay a few episodes in Studio, look for joint-graph spikes, stalls, black or

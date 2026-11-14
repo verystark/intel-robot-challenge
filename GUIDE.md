@@ -6,6 +6,11 @@ detailed tool docs are linked from each section.
 Last updated: 2026-11-14, morning. The status in section 3 changes quickly, so update it when you
 finish something.
 
+> **Updated plan for recording and running the arm: [GUIDE2.md](GUIDE2.md).** The policy only picks
+> and lifts; showing the brick to the camera is scripted; the Task box is never touched while
+> recording; bowls follow simple alternation rules. Where GUIDE2.md disagrees with sections 1, 7, 9
+> or 10 below, GUIDE2.md wins.
+
 ---
 
 ## 1. What we're building
@@ -245,7 +250,10 @@ appear. Teleoperate stays on between episodes, so A can move the arm without rec
 - **The sort sentence is random on purpose** (50/50, independent of the brick). SmolVLA must learn to
   follow the sentence, not judge the brick, because at run time Anomalib's verdict is what's in it.
 - **Changing the Task box:** copy the sentence from the `layout.py` terminal (select, Ctrl+C), then in
-  Studio click the Task box, Ctrl+A, Ctrl+V.
+  Studio click the Task box, Ctrl+A, Ctrl+V. If the cursor lands on an empty line below the text,
+  press Backspace.
+- **The arrow keys do nothing while the cursor is in the Task box** (Studio ignores shortcuts while
+  you type). After pasting, click an empty part of the Studio page, then press **→**.
 - **Discards:** a discarded pick → bring the arm home and redo it. A discarded sort → bring the brick
   back to the green box without recording, then redo it. Only press Enter in `layout.py` when both
   episodes are accepted.
