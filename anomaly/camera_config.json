@@ -10,12 +10,12 @@
     "power_line_frequency": 1,
     "exposure_time_absolute": 330,
     "gain": 16,
-    "white_balance_temperature": 4600,
-    "focus_absolute": 272
+    "white_balance_temperature": 4200,
+    "focus_absolute": 360
   },
   "box_center": [
-    969,
-    502
+    1015,
+    525
   ],
-  "box_size": 500
+  "box_size": 760
 }
