@@ -312,16 +312,20 @@ class Cell:
                 t for t in self.world.episodes if t != self.cfg["sentences"]["pick"]))
             if self.args.replay:  # recorded actions only make sense from the recorded start
                 self.arm.robot.teleport(episode["state"][0])
+                self.arm.take_over(episode["state"][0])  # the mock's goal is now that start
         start = self.arm.joints()
         stage = "pick" if name == "PICK" else "sort"
         self.policy_source.use(stage)
         self.policy_source.set_task(sentence if self.models[stage].takes_task else None)
-        self.watcher.begin(name, start, rules)
+        # Clamp the policy's first steps against the servos' current goal (the last scripted command).
+        self.watcher.begin(name, start, rules, command_ref=self.arm.last_command)
         self.set_stage(name)
         self.view.set(sentence=sentence)
         t0 = time.monotonic()
         self.runtime.run(duration_s=rules.timeout_s + 10)
         took = time.monotonic() - t0
+        # Hand-over: the servos keep the policy's last action as their goal; scripted moves continue from it.
+        self.arm.take_over(self.watcher._last_action)
         result = self.watcher.result or self.runtime.last_run_reason or "ended"
         if self.stop.is_set():
             result = "stopped"
@@ -449,8 +453,9 @@ class Cell:
         stage_times: dict[str, float] = {}
 
         if self.args.inspect_only:
-            # The brick was put in by hand: squeeze it with the closed-grip command.
+            # The brick was put in by hand: squeeze it with the closed-grip command before moving.
             self.grip = float(self.cfg["grip_closed"])
+            self.arm.set_gripper(self.grip)
         else:
             home_s = self.go_home(only_if_away=True)  # the pick episodes start at home
             if home_s:

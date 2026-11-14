@@ -154,20 +154,48 @@ class Arm:
     def joints(self) -> np.ndarray:
         return np.asarray(self.robot.get_observation().joint_positions, dtype=np.float32)
 
-    def hold(self) -> None:
-        """Command the current measured position, so the arm stays where it is."""
+    def take_over(self, command: np.ndarray | None) -> None:
+        """Hand-over from the policy: remember the last action it sent, which the servos still hold.
+
+        Scripted moves then continue from that goal instead of the measured position. With a
+        brick held the two differ at the gripper (the brick stops the jaws short of their
+        command: that gap is the squeeze), and a move starting from the measured gripper would
+        relax the grip for its first part.
+        """
+        if command is not None:
+            self.last_command = np.asarray(command, dtype=np.float32).copy()
+
+    def _start(self) -> np.ndarray:
+        """Where a scripted move starts: the servos' current goal (last command) when it is known
+        and the body is close to it, else the measured position (the arm was moved or is blocked);
+        the gripper always keeps its last command when known."""
         here = self.joints()
+        if self.last_command is None:
+            return here
+        if np.max(np.abs(here[BODY] - self.last_command[BODY])) <= self.limits.lag_limit:
+            return self.last_command.copy()
+        start = here.copy()
+        start[GRIPPER] = self.last_command[GRIPPER]
+        return start
+
+    def hold(self) -> None:
+        """Stop where the arm is: body at its measured position, gripper still at its commanded
+        value (commanding the measured gripper would release the squeeze on a held brick)."""
+        here = self.joints()
+        if self.last_command is not None:
+            here[GRIPPER] = self.last_command[GRIPPER]
         self.robot.send_action(here)
         self.last_command = here
 
     def move_to(self, target: np.ndarray, speed: float | None = None, check_lag: bool = True) -> np.ndarray:
         """Smoothly move all joints to `target` (cosine easing), then wait until it arrives.
 
-        Returns the measured joints at the end. Raises Stopped or ArmError after
-        commanding a hold.
+        Starts from the last command (see _start), so the hand-over from the policy and from one
+        scripted move to the next has no step in the servos' goal. Returns the measured joints at
+        the end. Raises Stopped or ArmError after commanding a hold.
         """
         limits = self.limits
-        start = self.joints()
+        start = self._start()
         target = np.asarray(target, dtype=np.float32)
         distance = float(np.max(np.abs(target - start)))
         duration = max(limits.min_time_s, distance / (speed or limits.speed))
@@ -190,8 +218,10 @@ class Arm:
             sleep = t0 + i / FPS - time.perf_counter()
             if sleep > 0:
                 time.sleep(sleep)
-        # Arrive: the gripper is ignored, since a held brick stops it short of its target.
+        # Arrive: within tolerance, or stopped moving (a joint under load can rest a few units off
+        # its command). The gripper is ignored: a held brick stops it short of its target.
         deadline = time.perf_counter() + 1.5
+        prev, still_since = None, None
         while time.perf_counter() < deadline:
             if self.stop.is_set():
                 self.hold()
@@ -199,14 +229,19 @@ class Arm:
             here = self.joints()
             if np.max(np.abs(here[BODY] - target[BODY])) <= limits.arrive_tol:
                 break
+            if prev is not None and np.max(np.abs(here[BODY] - prev[BODY])) * FPS < 2.0:
+                still_since = still_since or time.perf_counter()
+                if time.perf_counter() - still_since >= 0.15:
+                    break
+            else:
+                still_since = None
+            prev = here
             time.sleep(1 / FPS)
         time.sleep(limits.settle_s)
         return self.joints()
 
     def set_gripper(self, value: float, speed: float = 80.0) -> np.ndarray:
-        target = self.joints()
-        if self.last_command is not None:
-            target[BODY] = self.last_command[BODY]
+        target = self._start()
         target[GRIPPER] = value
         return self.move_to(target, speed=speed, check_lag=False)
 
@@ -218,8 +253,7 @@ class Arm:
         if roll is None:
             raise ArmError(f"A {degrees:.0f}° wrist turn doesn't fit from wrist_roll {base[WRIST_ROLL]:.0f}")
         target = base.copy()
-        target[WRIST_ROLL] = roll
-        target[GRIPPER] = here[GRIPPER]
+        target[WRIST_ROLL] = roll  # the gripper keeps base's (commanded) value: no change in squeeze
         return self.move_to(target, speed=speed)
 
 

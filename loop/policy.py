@@ -250,7 +250,8 @@ class StageWatcher:
         self.stop_flag: threading.Event | None = None
         self._lock = threading.Lock()
 
-    def begin(self, stage: str, start_pose: np.ndarray, rules: StageRules) -> None:
+    def begin(self, stage: str, start_pose: np.ndarray, rules: StageRules,
+              command_ref: np.ndarray | None = None) -> None:
         with self._lock:
             self.stage, self.rules = stage, rules
             self.start_pose = np.asarray(start_pose, dtype=np.float32)
@@ -258,9 +259,11 @@ class StageWatcher:
             self.away, self.still_since, self.prev, self.result = False, None, None, ""
             self.inference_ms = []
             self.clamped = 0
-            # Start the step limit from where the arm really is, and ramp it up over
-            # ease_s, so the first policy action can't yank the arm (Studio uses a 3 s grace).
-            self._last_action = self.start_pose.copy()
+            # Start the step limit from the servos' current goal (the last scripted command, else
+            # where the arm is), and ramp it up over ease_s, so the first policy action can't yank
+            # the arm (Studio uses a 3 s grace).
+            ref = command_ref if command_ref is not None else self.start_pose
+            self._last_action = np.asarray(ref, dtype=np.float32).copy()
 
     def on_tick(self, event) -> None:
         now = time.monotonic()

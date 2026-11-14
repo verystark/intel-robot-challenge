@@ -131,8 +131,8 @@ def connect(args) -> tuple[Arm, object]:
 
 def goto(arm: Arm, pose: np.ndarray, keep_grip: bool = True) -> None:
     target = pose.copy()
-    if keep_grip:
-        target[GRIPPER] = arm.joints()[GRIPPER]
+    if keep_grip:  # the gripper stays at its commanded value (the squeeze), not the measured one
+        target[GRIPPER] = (arm.last_command if arm.last_command is not None else arm.joints())[GRIPPER]
     arm.move_to(target)
 
 
@@ -180,7 +180,7 @@ def cmd_test_turn(args) -> None:
     arm, locks = connect(args)
     try:
         goto(arm, poses["show"])
-        show = arm.joints()
+        show = arm.last_command.copy()  # commanded, not measured: keeps any squeeze on a brick
         for stop in plan_stops(float(show[WRIST_ROLL]), stops_from_config(), per_deg)[1:]:
             target = show.copy()
             target[WRIST_ROLL] = stop.roll
@@ -225,8 +225,7 @@ def cmd_collect(args) -> None:
             folder = FOLDERS[key]
             arm.set_gripper(GRIP_CLOSED)
             time.sleep(0.4)
-            held = arm.joints()
-            base = held.copy()
+            base = arm.last_command.copy()  # commanded pose: turns keep the squeeze
             base[GRIPPER] = GRIP_CLOSED
             stamp = time.strftime("%Y%m%d_%H%M%S") + f"_{int(time.time() * 1000) % 1000:03d}"
             views = []
