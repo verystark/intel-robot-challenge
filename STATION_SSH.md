@@ -4,6 +4,28 @@ Lets the dev machine running Claude Code reach the Intel station laptop, to inst
 devices and run scripts remotely. Calibration and teleop stay with whoever is at the station, and
 nothing that moves the arm runs without someone there confirming it's clear.
 
+## Status: done on our station laptop (2026-11-14)
+
+Steps 1–4 are done and key-only logins are on (password logins refused, tested).
+
+```bash
+ssh intel@192.168.202.126
+```
+
+| | |
+|---|---|
+| User | `intel` |
+| Address | `192.168.202.126` on Wi-Fi `Hype-Guest` (DHCP, may change: re-check with `hostname -I`) |
+| Host key | `SHA256:LKijvmj3UbLt7EH9TQ705lHQyckMYD355ZCAXvq+JUc` (ED25519) |
+
+On the first connection, check that SSH shows exactly this host key fingerprint before typing
+`yes`. On shared venue Wi-Fi, a different fingerprint means you are not talking to our laptop.
+Guest Wi-Fi often blocks devices from reaching each other; if the connection times out, see
+[If the connection times out](#if-the-connection-times-out).
+
+Run the cleanup in [Before returning the laptop](#before-returning-the-laptop) at the end of the
+event.
+
 Run everything below **on the Intel laptop** (terminal: Ctrl+Alt+T).
 
 ## 1. Install and start the SSH server
