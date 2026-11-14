@@ -11,6 +11,7 @@ Output:
 
 from pathlib import Path
 
+from PIL import Image
 from anomalib.data import Folder
 from anomalib.deploy import ExportType
 from anomalib.engine import Engine
@@ -24,13 +25,21 @@ IMAGE_SIZE = (256, 256)
 SUBDIRS = ("normal", "abnormal", "test_normal")
 
 
-def check_dataset() -> None:
+def check_dataset() -> tuple[int, int]:
+    """Check every folder has photos, all the same size. Returns that size as (height, width)."""
+    sizes: set[tuple[int, int]] = set()
     for sub in SUBDIRS:
         folder = DATASET_DIR / sub
-        n = len(list(folder.glob("*.png"))) if folder.exists() else 0
-        print(f"  {sub:<12} {n:>4} images")
-        if n == 0:
+        files = sorted(folder.glob("*.png")) if folder.exists() else []
+        print(f"  {sub:<12} {len(files):>4} images")
+        if not files:
             raise SystemExit(f"No images in {folder}. Capture some with capture.py first.")
+        for path in files:
+            with Image.open(path) as image:
+                sizes.add((image.height, image.width))
+    if len(sizes) != 1:
+        raise SystemExit(f"Photos have different sizes {sorted(sizes)}: run recrop.py so they all match the box.")
+    return sizes.pop()
 
 
 def get_threshold(model) -> float | None:
@@ -50,7 +59,7 @@ def get_threshold(model) -> float | None:
 
 def main() -> None:
     print(f"Dataset: {DATASET_DIR}")
-    check_dataset()
+    crop_size = check_dataset()
 
     datamodule = Folder(
         name="duplo",
@@ -77,12 +86,17 @@ def main() -> None:
     print("\nTesting...")
     test_results = engine.test(model=model, datamodule=datamodule)
 
-    print("\nExporting to OpenVINO IR...")
+    # The exported model contains the pre-processor (resize to IMAGE_SIZE + normalize), so it
+    # takes the crop exactly as capture.py / camera.crop_box() produce it. A fixed shape of one
+    # image suits live inspection and the NPU. Without "dynamic_axes": {} the PatchCore export
+    # gets locked to a batch of 2 and rejects single images.
+    print(f"\nExporting to OpenVINO IR (input: 1 crop of {crop_size[1]}x{crop_size[0]})...")
     export_path = engine.export(
         model=model,
         export_type=ExportType.OPENVINO,
         export_root=EXPORT_DIR,
-        input_size=IMAGE_SIZE,
+        input_size=crop_size,
+        onnx_kwargs={"dynamic_axes": {}, "opset_version": 18},
     )
 
     threshold = get_threshold(model)

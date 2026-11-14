@@ -15,10 +15,11 @@ cameras      Anomalib    VLA policy  SO-101      OpenVINO
 | `capture.py` | Shows the webcam with a green box and saves the area inside it as a photo into `dataset/` |
 | `camera.py` | Opens the inspection camera, locks its settings and crops the box. Shared by capture and live inspection |
 | `camera_config.json` | Written by `capture.py`: camera, box position/size and locked settings. Live inspection reads it |
+| `recrop.py` | Re-cuts all photos from `dataset_full/` with the current box (after moving or resizing it). Backs up the old crops in `dataset_old_crops/` |
 | `train_export.py` | Trains a PatchCore model on the photos, tests it, and exports it to OpenVINO in `exported_model/` |
 | `requirements.txt` | Python dependencies |
 
-`dataset/`, `dataset_full/`, `exported_model/`, `results/` and `.venv/` are git-ignored.
+The photos (`dataset/`, `dataset_full/`) and `exported_model/` are committed so the whole team has them. `dataset_old_crops/`, `results/`, caches and `.venv/` are git-ignored.
 
 ## Setup on the station laptop (Linux)
 
@@ -105,6 +106,14 @@ Trains PatchCore (`resnet18`, layers `layer2`+`layer3`, 256×256 input), tests o
 `test_normal`, exports OpenVINO IR to `exported_model/weights/openvino/model.xml`, and prints the
 image threshold and test metrics (AUROC, F1).
 
+All photos must be the same size (run `recrop.py` if the box changed). The exported model takes
+one crop at that size, exactly as `camera.crop_box()` cuts it, as RGB; the resize to 256×256 and
+normalization are inside the model. With `anomalib.deploy.OpenVINOInferencer` you pass the RGB
+crop as a NumPy array.
+
+Trial run on 2026-11-14 (100 normal photos, fake scribbles as defects): training + export took
+about 3 minutes; one crop takes about 11 ms on the GPU, 30 ms on the CPU and 100 ms on the NPU.
+
 How PatchCore works: a pretrained ResNet18 describes each small patch of every good image; PatchCore
 stores a memory of these "normal" patches. A new image is scored by how far its patches are from the
 nearest normal patch — high distance = anomaly, which also gives a heatmap. One epoch is enough.
@@ -118,7 +127,8 @@ Done:
 - [x] Locked camera settings and stable camera name on the station laptop
 
 Missing / next:
-- [ ] End-to-end test run (nothing has been trained yet — verify the Anomalib 2.x API works)
+- [x] End-to-end test run: train, test and OpenVINO export work with Anomalib 2.7 (trial with fake defects)
+- [ ] Capture real `abnormal` and `test_normal` photos, then train on the real dataset
 - [ ] Live inspection script: camera → same box crop → OpenVINO model → good/defective + heatmap (use `camera.open_camera` + `camera.crop_box`)
 - [ ] Interface that hands the result to the robot loop (Step 6)
 - [ ] `--xpu` option to train on the Intel iGPU (`accelerator="auto"` falls back to CPU)
