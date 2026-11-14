@@ -6,7 +6,7 @@ camera settings are never changed.
 
     ../.venv/bin/python inspect_live.py                 # GPU
     ../.venv/bin/python inspect_live.py --device CPU    # or NPU
-    ../.venv/bin/python inspect_live.py --unsure 0.4 0.6
+    ../.venv/bin/python inspect_live.py --unsure 0.4 0.6   # default: bands.json, else 0.4 0.6
 
 Keys (click the window first):
     space   freeze / unfreeze the current result
@@ -32,6 +32,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from camera import CameraConfig, box_rect, crop_box, open_camera  # noqa: E402
+from detector import load_bands  # noqa: E402
 
 DEFAULT_MODEL = HERE / "exported_model" / "weights" / "openvino" / "model.xml"
 WINDOW = "Live inspection"
@@ -83,8 +84,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL, help="exported OpenVINO model.xml")
     parser.add_argument("--device", default="GPU", help="OpenVINO device: GPU, CPU or NPU")
-    parser.add_argument("--unsure", nargs=2, type=float, default=(0.4, 0.6), metavar=("LOW", "HIGH"),
-                        help="score band treated as unsure (default 0.4 0.6)")
+    bands = load_bands()
+    parser.add_argument("--unsure", nargs=2, type=float, default=(bands.low, bands.high), metavar=("LOW", "HIGH"),
+                        help=f"score band treated as unsure (default {bands.low} {bands.high}, from bands.json "
+                             "if calibrate_bands.py has written it)")
     args = parser.parse_args()
 
     if not args.model.exists():

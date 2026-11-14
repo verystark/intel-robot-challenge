@@ -16,8 +16,12 @@ cameras      Anomalib    VLA policy  SO-101      OpenVINO
 | `camera.py` | Opens the inspection camera, locks its settings and crops the box. Shared by capture and live inspection |
 | `camera_config.json` | Written by `capture.py`: camera, box position/size and locked settings. Live inspection reads it |
 | `recrop.py` | Re-cuts all photos from `dataset_full/` with the current box (after moving or resizing it). Backs up the old crops in `dataset_old_crops/` |
+| `old_setup/` | The first 475 good photos (03:47–04:16 on 2026-11-14), taken with the arm reaching down from above in front of a different backdrop. They don't match the current showing pose, so they are kept out of `dataset/` and not trained on |
 | `train_export.py` | Trains a PatchCore model on the photos, tests it, and exports it to OpenVINO in `exported_model/` |
 | `inspect_live.py` | Live test of the trained model: show a brick to the camera, see GOOD / UNSURE / DEFECTIVE, the anomaly score, a heatmap and the time per check |
+| `detector.py` | Runs the exported model with plain OpenVINO (works in Studio's venv too); bands and verdict rule. Used by the loop and the benchmarks |
+| `calibrate_bands.py` | Sets the good / unsure / defective bands from `test_normal` and `abnormal` scores on the loop's device, writes `bands.json` |
+| `quantize_int8.py` | Weight-only INT8 copy of the model in `exported_model_int8/` (4x smaller, scores within ~0.06); `--mode full` for full INT8 (moves scores a lot) |
 | `requirements.txt` | Python dependencies |
 
 The photos (`dataset/`, `dataset_full/`) and `exported_model/` are committed so the whole team has them. `dataset_old_crops/`, `results/`, caches and `.venv/` are git-ignored.
@@ -107,6 +111,12 @@ Trains PatchCore (`resnet18`, layers `layer2`+`layer3`, 256×256 input), tests o
 `test_normal`, exports OpenVINO IR to `exported_model/weights/openvino/model.xml`, and prints the
 image threshold and test metrics (AUROC, F1).
 
+`abnormal` may be empty. PatchCore learns from good photos only; without defective ones the
+threshold becomes the highest score among the held-out good photos and testing is skipped, so
+retrain once there are defective photos. `test_normal` must be a block of photos taken at another
+time (other bricks, other grips), not a random pick from `normal`: burst photos are near-duplicates
+and would make the threshold far too low.
+
 All photos must be the same size (run `recrop.py` if the box changed). The exported model takes
 one crop at that size, exactly as `camera.crop_box()` cuts it, as RGB; the resize to 256×256 and
 normalization are inside the model. With `anomalib.deploy.OpenVINOInferencer` you pass the RGB
@@ -145,8 +155,8 @@ Done:
 Missing / next:
 - [x] End-to-end test run: train, test and OpenVINO export work with Anomalib 2.7 (trial with fake defects)
 - [ ] Capture real `abnormal` and `test_normal` photos, then train on the real dataset
-- [ ] Live inspection script: camera → same box crop → OpenVINO model → good/defective + heatmap (use `camera.open_camera` + `camera.crop_box`)
-- [ ] Interface that hands the result to the robot loop (Step 6)
-- [ ] `--xpu` option to train on the Intel iGPU (`accelerator="auto"` falls back to CPU)
-- [ ] Benchmark latency on CPU / iGPU / NPU (Step 7, judged)
-- [ ] INT8 quantization with NNCF for faster inference
+- [x] Live inspection script (`inspect_live.py`)
+- [x] Train on the Intel GPU (`train_export.py`, default; slowest step 2.7 min vs 12–17 min on CPU)
+- [x] Benchmark latency on CPU / iGPU / NPU: `bench/anomaly_bench.py` → `bench/RESULTS.md`
+- [x] INT8 with NNCF: `quantize_int8.py` / `train_export.py --int8` (weight-only; full INT8 moved scores up to 0.28)
+- [x] Interface to the robot loop: `detector.py` + `bands.json`, used by `loop/run_cell.py`
