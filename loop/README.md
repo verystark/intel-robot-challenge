@@ -57,7 +57,7 @@ PY=physical-ai-studio/application/backend/.venv/bin/python
       least about 6 units from 0. `where` tells you.
    3. Close the Studio session. The follower keeps holding.
    4. Run `$PY loop/show_tool.py save`. It only reads the servos.
-3. **Calibrate the score bands** on the device the loop uses (NPU by default), once there are
+3. **Calibrate the score bands** on the device the loop uses (GPU by default), once there are
    defective photos: `cd anomaly && ../.venv/bin/python calibrate_bands.py`.
 4. **Someone at the station** with the follower's 12 V plug in reach. Every command that moves
    the arm asks you to type `clear` first.
@@ -77,13 +77,13 @@ PY=physical-ai-studio/application/backend/.venv/bin/python
 
 ## Choosing models and devices
 
-`cell_config.json` sets the defaults: the newest SmolVLA for both stages on the GPU, and Anomalib
-on the NPU. Override them on the command line:
+`cell_config.json` sets the defaults: the newest SmolVLA for both stages, and Anomalib, all on the
+GPU. Override them on the command line:
 
 ```bash
 $PY loop/run_cell.py --model SmolVLA-v2                              # one model for both stages
 $PY loop/run_cell.py --pick-model latest:act --pick-device NPU       # ACT picks on the NPU, SmolVLA sorts on the GPU
-$PY loop/run_cell.py --anomaly-device GPU --anomaly-model anomaly/exported_model_int8/weights/openvino/model.xml
+$PY loop/run_cell.py --anomaly-device NPU --anomaly-model anomaly/exported_model_int8/weights/openvino/model.xml
 ```
 
 - **Model names:** a name (`SmolVLA-v2`), `latest:smolvla`, `latest:act`, a Studio model id or its

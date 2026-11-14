@@ -4,7 +4,7 @@
   locked settings and crop box from anomaly/camera_config.json) and keeps reading in a
   background thread, so a photo is always a fresh frame, never an old buffered one.
 - ReplayInspectionCamera stands in for it in --sim, cycling through saved crops.
-- Scorer runs the Anomalib model in its own thread, so photo 1 is scored (on the NPU
+- Scorer runs the Anomalib model in its own thread, so photo 1 is scored (on the GPU
   by default) while the wrist turns for photo 2.
 """
 

@@ -142,8 +142,9 @@ running, restart the backend: Ctrl+C, wait about 30 s, then start it again.
   start if the model's input size doesn't match the box. Scores are normalised so that 0.5 is the
   model's threshold. The `--unsure` band around it separates GOOD, UNSURE and DEFECTIVE.
 - OpenCV windows on Linux don't report Shift, so the tools use digit keys for adjustments.
-- Per-crop latency for the current 720×720 model is in `bench/RESULTS.md`. The NPU is the
-  slowest (180–250 ms in tests), so the loop scores while the arm turns the brick, which hides that time.
+- Per-crop latency for the current 720×720 model is in `bench/RESULTS.md`. The loop runs it on the
+  GPU (18 ms vs 184 ms on the NPU). SmolVLA isn't running while the brick is shown, so the GPU is
+  free then. Its scores are also closest to FP32 on the CPU. ACT is the model that suits the NPU.
 
 ### Policy (Physical AI Studio)
 

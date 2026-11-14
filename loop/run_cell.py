@@ -4,7 +4,7 @@ Each cycle:
   1. PICK     SmolVLA, "Pick up the brick.", until the arm has gone out, come back and held still.
   2. SHOW     Scripted: smooth move to the saved show pose (loop/poses.json), keeping the grip.
   3. INSPECT  Photo, wrist turn 180 deg, photo, turn back. Anomalib scores each photo in the
-              background (NPU by default) while the arm moves. Either view defective ->
+              background (on the GPU by default) while the arm moves. Either view defective ->
               DEFECTIVE; both good -> GOOD; otherwise UNSURE -> turn 90 deg, third photo,
               which decides: good -> GOOD, still unsure -> DEFECTIVE (reject when in doubt).
   4. SORT     Back to where the pick ended (where sort episodes start), then SmolVLA with the
@@ -557,7 +557,7 @@ def main() -> None:
     parser.add_argument("--policy-device", help="OpenVINO device for both policies")
     parser.add_argument("--pick-device", help="OpenVINO device for the pick policy (default from config: GPU)")
     parser.add_argument("--sort-device", help="OpenVINO device for the sort policy (default from config: GPU)")
-    parser.add_argument("--anomaly-device", help="OpenVINO device for Anomalib (default from config: NPU)")
+    parser.add_argument("--anomaly-device", help="OpenVINO device for Anomalib (default from config: GPU)")
     parser.add_argument("--anomaly-model", help="Anomalib model.xml, relative to the repo")
     parser.add_argument("--cycles", type=int, default=0, help="stop after this many cycles (0 = until stopped)")
     parser.add_argument("--sim", action="store_true", help="no hardware: mock arm, recorded camera frames and photos")

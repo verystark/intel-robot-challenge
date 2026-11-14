@@ -71,7 +71,7 @@ sentence the VLA is given.
 ```text
 PICK ─────────▶ SHOW ─────────────▶ INSPECT ─────────────────────▶ verdict?
 SmolVLA or ACT  scripted move to    photo, turn 180°, photo           │
-picks the brick the saved pose      (Anomalib scores on the NPU      ├─ good / defective ─▶ SORT
+picks the brick the saved pose      (Anomalib scores on the GPU      ├─ good / defective ─▶ SORT
      ▲                               while the arm turns)            │
      │                                                               └─ unsure ─▶ RE-CHECK: turn 90°, 3rd photo
      │                                                                             good → good
@@ -131,8 +131,10 @@ provisional.
 
 - **SmolVLA keeps up on the GPU.** The loop asks for the next chunk with 25 actions left (833 ms at
   30 fps). SmolVLA's p95 on the GPU is 222 ms, 3.8× inside that budget.
-- **The NPU is slow for Anomalib, but the delay is hidden.** The loop scores each photo while the
-  arm turns the brick, so the NPU's 184 ms doesn't add to the cycle.
+- **Anomalib runs on the GPU (changed after this log was first written).** It is 10× faster there
+  than on the NPU (18 vs 184 ms). The GPU is free while the brick is shown, since no policy runs
+  then. Its scores are also closer to FP32 on the CPU. The NPU's use is the ACT pick, where it
+  matches the GPU.
 - **INT8 Anomalib is smaller, not faster.** It is 4× smaller (9 MB), about as fast, with scores
   within about 0.06.
 - **Sensors without sudo:** package temperature, CPU, GPU and NPU busy %, and the battery's

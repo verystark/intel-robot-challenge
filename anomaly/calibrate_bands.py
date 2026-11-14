@@ -13,8 +13,8 @@ overlap, the unsure band sits in the middle of the gap between them.
 Scores differ slightly between devices (the GPU and NPU compute in 16-bit), so
 calibrate on the device the loop uses; the device is saved with the bands.
 
-    ../.venv/bin/python calibrate_bands.py                  # NPU, writes bands.json
-    ../.venv/bin/python calibrate_bands.py --device GPU
+    ../.venv/bin/python calibrate_bands.py                  # GPU, writes bands.json
+    ../.venv/bin/python calibrate_bands.py --device NPU
     ../.venv/bin/python calibrate_bands.py --dry-run        # print only
     ../.venv/bin/python calibrate_bands.py --low 0.35 --high 0.7   # set by hand
 """
@@ -75,7 +75,7 @@ def pick_bands(good: np.ndarray, bad: np.ndarray) -> Bands:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
-    parser.add_argument("--device", default="NPU", help="CPU, GPU or NPU: the device the loop runs Anomalib on")
+    parser.add_argument("--device", default="GPU", help="CPU, GPU or NPU: the device the loop runs Anomalib on")
     parser.add_argument("--low", type=float, help="set the band by hand instead")
     parser.add_argument("--high", type=float)
     parser.add_argument("--dry-run", action="store_true", help="print, don't write bands.json")

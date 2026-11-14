@@ -3,7 +3,7 @@
   "sort_model": "latest:smolvla",
   "pick_device": "GPU",
   "sort_device": "GPU",
-  "anomaly_device": "NPU",
+  "anomaly_device": "GPU",
   "anomaly_model": "anomaly/exported_model/weights/openvino/model.xml",
   "execution": "async",
   "request_threshold": 0.5,

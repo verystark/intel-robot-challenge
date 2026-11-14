@@ -30,15 +30,15 @@ PERCEIVE                DETECT                  REASON                   ACT    
 top RealSense  ─┐       inspection webcam ──▶   verdict ──▶ sentence ──▶ SmolVLA sort           OpenVINO everywhere
 wrist camera   ─┴──▶ pick policy (SmolVLA      PatchCore score +        "…defective. Put it      device per model by
                      or ACT) ──▶ SO-101         heatmap, 2-3 views       on the orange plate."    measurement, INT8,
-                     picks the brick            (NPU, while the arm      ──▶ SO-101 sorts         zero-noise SmolVLA,
+                     picks the brick            (GPU, while the arm      ──▶ SO-101 sorts         zero-noise SmolVLA,
                      scripted show pose ──▶     turns the brick)                                  async chunks
 ```
 
 | Stage | What runs | Where | Why there |
 |---|---|---|---|
-| Pick | SmolVLA `Pick up the brick.` (or ACT, `--pick-model latest:act`) | GPU (ACT: NPU) | SmolVLA needs the GPU. ACT is small enough for the NPU, leaving the GPU free. |
+| Pick | SmolVLA `Pick up the brick.` (or ACT, `--pick-model latest:act`) | GPU (ACT: NPU) | SmolVLA needs the GPU: 214 ms per chunk, it won't compile for the NPU, and the CPU takes 4.8 s. ACT runs as fast on the NPU (17 ms) as on the GPU (15 ms). |
 | Show | Scripted, eased joint move to a saved pose; wrist turns 180° | CPU | The photo must be taken from the same pose every time. Anomalib flags anything that differs from its training photos (`ANOMALY_DATA_REVIEW.md`). |
-| Inspect | Anomalib PatchCore, heatmap, good / unsure / defective bands | NPU | Each photo is scored while the arm turns the brick, so the NPU's latency is hidden and the GPU stays free for the VLA. |
+| Inspect | Anomalib PatchCore, heatmap, good / unsure / defective bands | GPU | 18 ms per photo vs 184 ms on the NPU and 56 ms on the CPU. Its scores are also closest to FP32 on the CPU. The GPU is free then: no policy runs while the brick is shown. |
 | Sort | The same SmolVLA, with the verdict in the sentence | GPU | The VLA reads the verdict. The sentence is the "structured signal" the brief asks for. |
 | Measure | `bench/sysmon.py`: temperature, CPU / GPU / NPU busy, power | – | Judges want evidence. |
 
@@ -65,10 +65,10 @@ which one counts; the design covers both.
 | Criterion (JUNCTION2026.md) | Pts | Our answer |
 |---|---|---|
 | Task success rate | 25 | Sorted correctly N of M (counted by a person), cycle time from the log, bricks anywhere in the pick area |
-| Intel tech integration | 25 | OpenVINO for all models, NPU for Anomalib (and ACT), GPU for SmolVLA, Studio for data and training |
+| Intel tech integration | 25 | OpenVINO for all models, each on the device measured best for it: SmolVLA and Anomalib on the GPU, ACT on the NPU; Studio for data and training |
 | Dataset & pipeline quality | 20 | Raw `main` kept, cleaned copies `main-clean*` relabelled by script, episode review |
 | System efficiency | 20 | Latency per step and per cycle, temperature, GPU/NPU load, power: `bench/RESULTS.md` |
-| Creativity | 10 | Verdict-in-the-sentence, two-view inspection with re-check, NPU work hidden behind motion |
+| Creativity | 10 | Verdict-in-the-sentence, two-view inspection with re-check, scoring done while the arm turns the brick |
 
 ## 4. The moment a training run finishes
 
@@ -96,10 +96,10 @@ To use ACT for the pick: add `--pick-model <ACT name> --pick-device NPU`.
 
 1. `cd anomaly && ../.venv/bin/python train_export.py --int8`. It trains on the Intel GPU
    (about 3 min) and writes `exported_model/` and `exported_model_int8/`.
-2. `../.venv/bin/python calibrate_bands.py` sets the good / unsure / defective bands on the NPU
+2. `../.venv/bin/python calibrate_bands.py` sets the good / unsure / defective bands on the GPU
    and writes `bands.json`. Check the printed table: how many good bricks are rejected, and how
    many defects pass.
-3. `../.venv/bin/python inspect_live.py --device NPU`: a live check with real bricks. Close
+3. `../.venv/bin/python inspect_live.py --device GPU`: a live check with real bricks. Close
    `capture.py` first.
 4. `../.venv/bin/python ../bench/anomaly_bench.py` updates the latency table.
 
@@ -127,8 +127,8 @@ To use ACT for the pick: add `--pick-model <ACT name> --pick-device NPU`.
    'Pick up the brick.' It runs on the laptop's GPU with OpenVINO, at about N ms per action chunk
    (RESULTS.md)."
 3. **Show and inspect:** "A script holds the brick at a fixed pose. Anomalib looks at two sides
-   while the wrist turns. It runs on the NPU, so the GPU stays free for the VLA, and the scoring
-   happens while the arm is moving anyway. The heatmap shows where it thinks the defect is."
+   while the wrist turns. It runs on the GPU in about 18 ms a photo, while the arm is still moving.
+   The heatmap shows where it thinks the defect is."
 4. **The verdict sentence:** point at "Sent to SmolVLA". "The verdict is not a hard-coded motion.
    It's what we tell the VLA, and the same model then chooses the plate."
 5. **A defective brick and an unsure one:** show the re-check, "reject when in doubt".
@@ -143,8 +143,9 @@ To use ACT for the pick: add `--pick-model <ACT name> --pick-device NPU`.
 - *How do you know it reads the sentence?* The sort sentence was drawn independently of the
   brick while recording, so only the sentence tells the plates apart. To show it: give a good brick
   the defective sentence in Studio's Run model, and it should go to orange (try it before the demo).
-- *Why the NPU for Anomalib if the GPU is faster?* The NPU latency is hidden behind the wrist
-  turn, so the GPU is free for the VLA. The bench table shows both.
+- *Why isn't Anomalib on the NPU?* We measured it: 184 ms on the NPU vs 18 ms on the GPU, and no
+  policy needs the GPU while the brick is shown. The NPU runs the ACT pick instead, where it
+  matches the GPU (17 vs 15 ms). The bench table shows every model on every device.
 - *What about uncertain detections?* Two views, a third on unsure, reject if still unsure. The
   bands come from held-out good photos and real defects (`calibrate_bands.py`).
 
