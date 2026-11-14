@@ -17,6 +17,7 @@ cameras      Anomalib    VLA policy  SO-101      OpenVINO
 | `camera_config.json` | Written by `capture.py`: camera, box position/size and locked settings. Live inspection reads it |
 | `recrop.py` | Re-cuts all photos from `dataset_full/` with the current box (after moving or resizing it). Backs up the old crops in `dataset_old_crops/` |
 | `train_export.py` | Trains a PatchCore model on the photos, tests it, and exports it to OpenVINO in `exported_model/` |
+| `inspect_live.py` | Live test of the trained model: show a brick to the camera, see GOOD / UNSURE / DEFECTIVE, the anomaly score, a heatmap and the time per check |
 | `requirements.txt` | Python dependencies |
 
 The photos (`dataset/`, `dataset_full/`) and `exported_model/` are committed so the whole team has them. `dataset_old_crops/`, `results/`, caches and `.venv/` are git-ignored.
@@ -113,6 +114,21 @@ crop as a NumPy array.
 
 Trial run on 2026-11-14 (100 normal photos, fake scribbles as defects): training + export took
 about 3 minutes; one crop takes about 11 ms on the GPU, 30 ms on the CPU and 100 ms on the NPU.
+
+## 3. Test the model live
+
+```bash
+../.venv/bin/python inspect_live.py                 # GPU (default)
+../.venv/bin/python inspect_live.py --device NPU    # or CPU
+../.venv/bin/python inspect_live.py --unsure 0.4 0.6
+```
+
+Uses the same camera, settings and box as `capture.py` (close `capture.py` first: one program per
+camera). Shows the verdict, the anomaly score (0–100 %, 50 % = the model's threshold; the
+`--unsure` band in between is UNSURE), a heatmap of where it looks defective (`h`), and ms per
+check. `space` freezes the result. It refuses to start if the box size no longer matches the model.
+The score is a distance from "normal", not a probability: use it to set the unsure band from
+real good and defective bricks.
 
 How PatchCore works: a pretrained ResNet18 describes each small patch of every good image; PatchCore
 stores a memory of these "normal" patches. A new image is scored by how far its patches are from the
