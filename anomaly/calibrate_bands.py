@@ -73,13 +73,16 @@ def pick_bands(good: np.ndarray, bad: np.ndarray) -> Bands:
 
 
 def main() -> None:
+    global DATASET_DIR
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--device", default="GPU", help="CPU, GPU or NPU: the device the loop runs Anomalib on")
     parser.add_argument("--low", type=float, help="set the band by hand instead")
     parser.add_argument("--high", type=float)
     parser.add_argument("--dry-run", action="store_true", help="print, don't write bands.json")
+    parser.add_argument("--dataset", default="dataset", help="photo folder under anomaly/ (e.g. dataset_show)")
     args = parser.parse_args()
+    DATASET_DIR = HERE / args.dataset
 
     det = Detector(args.model, args.device)
     good = score_folder(det, DATASET_DIR / "test_normal")

@@ -98,21 +98,29 @@ def make_engine(accelerator: str) -> Engine:
     return Engine(accelerator="cpu", max_epochs=1, default_root_dir=RESULTS_DIR)
 
 
-def make_model() -> Patchcore:
+def make_model(coreset: float = 0.1) -> Patchcore:
     return Patchcore(
         backbone="resnet18",
+        coreset_sampling_ratio=coreset,
         layers=["layer2", "layer3"],
         pre_processor=Patchcore.configure_pre_processor(image_size=IMAGE_SIZE),
     )
 
 
 def main() -> None:
+    global DATASET_DIR
     parser = argparse.ArgumentParser(description="Train PatchCore on dataset/ and export it to OpenVINO.")
     parser.add_argument("--accelerator", choices=("auto", "xpu", "cpu"), default="auto",
                         help="train on the Intel GPU (xpu) or the CPU; auto = xpu when available")
     parser.add_argument("--int8", action="store_true",
                         help=f"also export an INT8 model (post-training quantisation) to {EXPORT_DIR_INT8.name}/")
+    parser.add_argument("--coreset", type=float, default=0.1,
+                        help="share of good patches PatchCore keeps (default 0.1). With hundreds of burst "
+                             "photos use 0.02: 5x smaller memory and faster, and the last step needs far less RAM")
+    parser.add_argument("--dataset", default="dataset",
+                        help="photo folder under anomaly/ (default dataset; dataset_show = photos from show_tool collect)")
     args = parser.parse_args()
+    DATASET_DIR = HERE / args.dataset
 
     print(f"Dataset: {DATASET_DIR}")
     crop_size, has_defects = check_dataset()
@@ -137,7 +145,7 @@ def main() -> None:
     if accelerator == "auto":
         accelerator = "xpu" if xpu_available() else "cpu"
 
-    model = make_model()
+    model = make_model(args.coreset)
     engine = make_engine(accelerator)
     print(f"\nTraining PatchCore on {'the Intel GPU (xpu)' if accelerator == 'xpu' else 'the CPU'}...")
     start = time.perf_counter()
@@ -148,7 +156,7 @@ def main() -> None:
             raise
         print(f"\nTraining on the Intel GPU failed ({type(error).__name__}: {error}). Retrying on the CPU...")
         accelerator = "cpu"
-        model, engine = make_model(), make_engine("cpu")
+        model, engine = make_model(args.coreset), make_engine("cpu")
         start = time.perf_counter()
         engine.fit(model=model, datamodule=datamodule)
     train_s = time.perf_counter() - start
@@ -183,7 +191,7 @@ def main() -> None:
 
     threshold = get_threshold(model)
     print("\n" + "=" * 50)
-    print(f"Trained on:       {accelerator} in {train_s / 60:.1f} min")
+    print(f"Trained on:       {accelerator} in {train_s / 60:.1f} min (coreset {args.coreset})")
     print(f"Exported model:   {export_path}")
     if int8_path is not None:
         print(f"INT8 model:       {int8_path}")

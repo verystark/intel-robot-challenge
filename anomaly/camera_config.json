@@ -11,11 +11,11 @@
     "exposure_time_absolute": 330,
     "gain": 16,
     "white_balance_temperature": 4200,
-    "focus_absolute": 360
+    "focus_absolute": 312
   },
   "box_center": [
-    985,
-    529
+    990,
+    481
   ],
   "box_size": 720
 }
