@@ -1,583 +1,849 @@
-// The submission deck: nine 16:9 slides from the same data and components as the video.
-// Each slide is a 6 s sequence; scripts/deck.mjs renders the last frame of each to a PNG
-// (all animations finished) and scripts/deck_pdf.py joins them into one PDF.
+// The submission deck, drawn as screens of the cell's own operator HMI (loop/dashboard, ISA-101):
+// nine static 16:9 pages from video/public/data.json (facts.json is passed through as data.facts).
+// scripts/deck.mjs renders the last frame of each page to a PNG; scripts/deck_pdf.py joins them.
 import React from 'react';
 import {AbsoluteFill, Sequence} from 'remotion';
+import rawCoverage from '../../public/coverage.json';
 import {data} from '../data';
-import {C, font, monoFont} from '../theme';
-import {Arrow, Box, Footage, Line, Photo, Title, Value} from '../components/ui';
-import {CoverageMap, LayoutMap, coverageCounts, trials} from '../components/CoverageMap';
+import {
+  ArrowDefs,
+  Col,
+  CoveragePlot,
+  Disp,
+  Equip,
+  Events,
+  Ev,
+  Faceplate,
+  Gauge,
+  H,
+  KV,
+  MONO,
+  Photo,
+  Pipe,
+  SANS,
+  Screen,
+  Swatch,
+  TagBox,
+  Tbl,
+  Text,
+  Val,
+} from './hmi';
 
 export const SLIDE_FRAMES = 180;
 
+// ── Facts (video/facts.json) ──────────────────────────────────────────────────────────────
+
+interface Stop {
+  deg: number;
+  median: number;
+  label: string;
+}
+interface Facts {
+  policy: {family: string; training: string; chunk_ms_gpu: number};
+  inspection: {
+    crop: string;
+    stops_deg: number[];
+    frames_per_stop: number;
+    bands: [number, number];
+    train_photos: number;
+    train_photos_at_show_pose: number;
+    held_out: string;
+    ms_gpu_loop: number;
+    ms_gpu_loop_p95: number;
+    ms_cpu: number;
+    ms_npu: number;
+    int8: string;
+    train_time: string;
+  };
+  results: {
+    runs: string[];
+    model: string;
+    bricks_through_loop: number;
+    verdicts_correct: number;
+    defective_rejected: [number, number];
+    clean_accepted: [number, number];
+    picks_ok: number;
+    pick_attempts: number;
+    pick_timeouts: number;
+    picks_stopped_by_operator: number;
+    median_cycle_s: number;
+    median_pick_s: number;
+    median_inspect_s: number;
+    median_sort_s: number;
+    thermal: string;
+    failures: string[];
+    placements_checked: string | null;
+    verdicts_checked: string;
+  };
+}
 const f = data.facts;
+const F = data.facts as unknown as Facts;
+const pol = F.policy;
+const insp = F.inspection;
+const res = F.results;
 const n = data.numbers;
+const loop = data.loop;
+const model = f.models.sort.name;
 
-// ── Layout ──────────────────────────────────────────────────────────────────────────────
+// What's still missing for the deck (shown as the P2 DATA.DRAFT banner on every page).
+const DRAFT: string[] = [
+  ...(res.placements_checked ? [] : ['landing plate not counted (loop does not log it)']),
+  'PatchCore CPU / NPU times measured while the loop ran',
+  ...(f.team.length ? [] : ['team names missing']),
+];
 
-const Slide: React.FC<{num: number; title: string; kicker?: string; children: React.ReactNode}> = ({num, title, kicker, children}) => (
-  <AbsoluteFill style={{background: C.bg, padding: '64px 90px 0 90px'}}>
-    {kicker && (
-      <div style={{fontFamily: monoFont, fontSize: 22, color: C.stage, letterSpacing: 1, marginBottom: 8}}>{kicker}</div>
-    )}
-    <Title size={56}>{title}</Title>
-    <div style={{flex: 1, display: 'flex', marginTop: 36, marginBottom: 90, gap: 60, minHeight: 0}}>{children}</div>
-    <Footer num={num} />
-  </AbsoluteFill>
-);
+// ── Helpers ───────────────────────────────────────────────────────────────────────────────
 
-const Footer: React.FC<{num: number}> = ({num}) => (
-  <div
-    style={{
-      position: 'absolute',
-      left: 90,
-      right: 90,
-      bottom: 30,
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'flex-end',
-      fontFamily: font,
-      fontSize: 20,
-      color: C.dim,
-      borderTop: `1px solid ${C.line}`,
-      paddingTop: 12,
-    }}
-  >
-    <span style={{whiteSpace: 'nowrap'}}>Jenssenit · Intel Physical AI Challenge, Junction 2026</span>
-    {data.draft.length > 0 && (
-      <span style={{fontFamily: monoFont, fontSize: 14, color: C.placeholder, flex: 1, textAlign: 'center', padding: '0 24px', lineHeight: 1.3}}>
-        draft: {data.draft.join(' · ')}
-      </span>
-    )}
-    <span style={{fontFamily: monoFont, whiteSpace: 'nowrap'}}>{num} / 9</span>
-  </div>
-);
+const deg = (d: number) => `${d < 0 ? '−' : ''}${Math.abs(d)}°`;
+const stopsText = insp.stops_deg.map(deg).join(' / ');
+const coverage = rawCoverage as unknown as {releases: {GOOD: number[][]; DEFECTIVE: number[][]}};
+const sides = (pts: number[][]) => `${pts.filter((q) => q[1] > 0).length} left / ${pts.filter((q) => q[1] <= 0).length} right`;
+type PolicyRow = {model: string; device: string; median_ms: number};
+const bench = (prefix: string, device: string) => (data.bench.policy as PolicyRow[]).find((r) => r.model.startsWith(prefix) && r.device === device)?.median_ms ?? null;
+const ms = (v: number | null | undefined) => (v === null || v === undefined ? null : v < 100 ? Math.round(v * 10) / 10 : Math.round(v));
+const [lowBand, highBand] = insp.bands;
 
-const Col: React.FC<{children: React.ReactNode; width?: number; gap?: number}> = ({children, width, gap = 22}) => (
-  <div style={{display: 'flex', flexDirection: 'column', gap, flex: width ? undefined : 1, width, minWidth: 0}}>{children}</div>
-);
+type Cycle = {cycle: number; inspect?: {verdict: string; stops?: Stop[]}};
+const cycles = data.run.cycles as unknown as Cycle[];
+const byCycle = (c: number) => cycles.find((x) => x.cycle === c);
+const worst = (c: Cycle) => Math.max(...(c.inspect?.stops ?? []).map((s) => s.median));
+// Example bricks from the arm run (photos checked by eye): a clean red brick and a white brick with marker.
+const CLEAN = 69;
+const MARKED = 34;
+const failureEvents = (): Ev[] =>
+  res.failures.map((x) => {
+    const [tag, ...rest] = x.split(': ');
+    return {prio: tag.startsWith('INSP.FACES') || tag.startsWith('INSP.MARGIN') ? 3 : 2, tag, msg: rest.join(': ')};
+  });
 
-const Bullet: React.FC<{children: React.ReactNode; size?: number; colour?: string}> = ({children, size = 28, colour = C.text}) => (
-  <div style={{display: 'flex', gap: 14, fontFamily: font, fontSize: size, color: colour, lineHeight: 1.35}}>
-    <span style={{color: C.stage}}>·</span>
-    <span>{children}</span>
-  </div>
-);
+// ── F1 SYSTEM ─────────────────────────────────────────────────────────────────────────────
 
-/** A two-column fact table. */
-const Rows: React.FC<{rows: [React.ReactNode, React.ReactNode][]; size?: number; valueWidth?: number}> = ({rows, size = 28, valueWidth}) => (
-  <div style={{display: 'flex', flexDirection: 'column'}}>
-    {rows.map(([k, v], i) => (
-      <div
-        key={i}
-        style={{display: 'flex', justifyContent: 'space-between', gap: 30, borderBottom: `1px solid ${C.line}`, padding: '12px 0', alignItems: 'baseline'}}
-      >
-        <span style={{fontFamily: font, fontSize: size, color: C.dim}}>{k}</span>
-        <span style={{fontFamily: monoFont, fontSize: size - 2, color: C.text, textAlign: 'right', width: valueWidth}}>{v}</span>
-      </div>
-    ))}
-  </div>
-);
-
-const Tag: React.FC<{text: string; colour: string}> = ({text, colour}) => (
-  <span style={{fontFamily: monoFont, fontSize: 18, color: colour, border: `1.5px solid ${colour}`, borderRadius: 6, padding: '2px 8px'}}>{text}</span>
-);
-
-const Note: React.FC<{children: React.ReactNode}> = ({children}) => (
-  <div style={{fontFamily: font, fontSize: 20, color: C.dim, lineHeight: 1.4}}>{children}</div>
-);
-
-// ── Numbers from the benchmark files ───────────────────────────────────────────────────
-
-type PolicyRow = {model: string; device: string; median_ms: number; p95_ms?: number; chunk: number};
-const policyMs = (prefix: string, device: string): PolicyRow | null =>
-  (data.bench.policy as PolicyRow[]).find((r) => r.model.startsWith(prefix) && r.device === device) ?? null;
-const anomalyMs = (precision: string, device: string) =>
-  data.bench.anomaly.find((r) => r.precision === precision && r.device === device) ?? null;
-const ms = (v: number | undefined | null) => (v === null || v === undefined ? null : v < 100 ? Math.round(v * 10) / 10 : Math.round(v));
-
-// ── Slides ─────────────────────────────────────────────────────────────────────────────
-
-const S1Title: React.FC = () => (
-  <AbsoluteFill style={{background: C.bg, flexDirection: 'row', padding: '90px 90px 0 90px', gap: 70}}>
-    <Col gap={30}>
-      <div style={{fontFamily: monoFont, fontSize: 24, color: C.stage}}>Intel Physical AI Challenge · Junction 2026</div>
-      <Title size={120}>Jenssenit</Title>
-      <Line size={36}>
-        A vision-language-action model picks and sorts bricks lying at random positions onto plates that can be anywhere.
-        Anomalib inspects every brick in the loop. All inference runs on one Intel Core Ultra laptop.
-      </Line>
-      <Rows
-        rows={[
-          ['Bricks', 'any number, random positions'],
-          ['Plates', 'movable'],
-          ['Coordinates in code', 'none'],
-          ['Defect check', 'every brick, before sorting'],
-        ]}
-        size={30}
-      />
-      <Line size={26} colour={C.dim}>
-        {f.team.length ? f.team.join(' · ') : <Value v={null} name="team names" />}
-      </Line>
+const S1: React.FC = () => (
+  <Screen page={1} title="SYSTEM" draftItems={DRAFT}>
+    <Col w={990}>
+      <Faceplate title="SYSTEM DESCRIPTION" grow={1} pad={22}>
+        <div style={{fontSize: 84, fontWeight: 700, letterSpacing: '.02em', lineHeight: 1}}>JENSSENIT</div>
+        <Text size={27}>
+          A pi0.5 vision-language-action model picks and sorts bricks lying at random positions onto plates that can be moved.
+          Anomalib inspects every brick in the loop. All inference runs on one Intel Core Ultra laptop.
+        </Text>
+        <div style={{marginTop: 10}}>
+          <KV
+            size={24}
+            labelW={360}
+            rows={[
+              ['BRICKS', 'any number, random positions'],
+              ['TARGET SURFACE', 'two plates, movable, named by colour'],
+              ['COORDINATES IN CODE', 'none: picking and placing are learned'],
+              ['DEFECT CHECK', 'Anomalib PatchCore on the brick, every brick'],
+              ['POLICY', `pi0.5 (${model})`],
+              ['RESULT ON THE ARM', `${res.verdicts_correct} / ${res.bricks_through_loop} verdicts right · ${res.defective_rejected[0]} / ${res.defective_rejected[1]} defects rejected`],
+              ['INFERENCE', 'on the laptop, OpenVINO'],
+              ['TEAM', f.team.length ? f.team.join(', ') : <Val key="t" v={null} name="TEAM NAMES" />],
+            ]}
+          />
+        </div>
+      </Faceplate>
     </Col>
-    <div style={{width: 760, height: 860, position: 'relative', borderRadius: 14, overflow: 'hidden', alignSelf: 'flex-start'}}>
-      {data.footage.a1 ? (
-        <Footage id="a1" label="" startFrom={f.run_take.footage_offset_s + 2} volume={0} />
-      ) : (
-        <CoverageMap size={760} delay={-10} />
-      )}
-    </div>
-    <Footer num={1} />
-  </AbsoluteFill>
-);
-
-const S2Task: React.FC = () => (
-  <Slide num={2} title="The task: nothing is in a fixed place" kicker="WHAT IS DIFFERENT">
     <Col>
-      <Line size={30} colour={C.dim}>
-        A recorded or hard-coded motion only works with one brick in one place. Here the bricks, their positions and the
-        plates change from run to run.
-      </Line>
-      <Rows
-        rows={[
-          ['Bricks', 'any number, random position and rotation'],
-          ['Plates', f.run_take.plate_swap_shown ? 'two, anywhere within reach; swapped mid-run in tests' : 'two, anywhere within reach'],
-          ['Coordinates in code', 'none: picking and placing are learned'],
-          ['Defect check', 'Anomalib on every brick, before it is sorted'],
-          ['Who chooses', 'nobody: the loop runs on its own'],
-        ]}
-        size={28}
-      />
-      <Box>
-        <Line size={22} colour={C.dim}>
-          The three task sentences (exact; the training data uses the same)
-        </Line>
-        <Line size={24} mono>
-          pick: "{f.sentences.pick}"
-        </Line>
-        <Line size={24} mono colour={C.good}>
-          good: "{f.sentences.GOOD}"
-        </Line>
-        <Line size={24} mono colour={C.defective}>
-          defective: "{f.sentences.DEFECTIVE}"
-        </Line>
-      </Box>
+      <Faceplate title="WORKSPACE · TOP VIEW" hint={`where the training data (${f.dataset.name}) grasped and released bricks`} grow={1}>
+        <CoveragePlot w={868} h={780} />
+      </Faceplate>
     </Col>
-    <Col width={560} gap={14}>
-      <LayoutMap size={560} delay={-10} />
-      <Note>Test layouts come from a random draw (tools/random_layout.py), not from us choosing positions.</Note>
-    </Col>
-  </Slide>
+  </Screen>
 );
 
-const Stage: React.FC<{name: string; learned: boolean; lines: React.ReactNode[]; device: string}> = ({name, learned, lines, device}) => (
-  <Box colour={learned ? C.stage : C.line} style={{flex: 1, display: 'flex', flexDirection: 'column', gap: 12, padding: '20px 22px'}}>
-    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-      <Title size={36}>{name}</Title>
-      <Tag text={learned ? 'learned' : 'scripted'} colour={learned ? C.stage : C.dim} />
-    </div>
-    {lines.map((l, i) => (
-      <Line key={i} size={23} colour={i === 0 ? C.text : C.dim}>
-        {l}
-      </Line>
-    ))}
-    <div style={{marginTop: 'auto'}}>
-      <Tag text={device} colour={C.text} />
-    </div>
-  </Box>
-);
+// ── F2 TASK ───────────────────────────────────────────────────────────────────────────────
 
-const S3Cell: React.FC = () => (
-  <Slide num={3} title="The cell: learned where it varies, scripted where it must not" kicker="ARCHITECTURE">
-    <Col gap={30}>
-      <div style={{display: 'flex', alignItems: 'stretch', gap: 14, height: 400}}>
-        <Stage
-          name="Pick"
-          learned
-          lines={[`${f.models.pick.name}, task "${f.sentences.pick}"`, 'Top and wrist cameras, joint state in; joint actions out']}
-          device={`${f.models.pick.device} · OpenVINO`}
-        />
-        <div style={{alignSelf: 'center'}}>
-          <Arrow length={40} />
-        </div>
-        <Stage
-          name="Show"
-          learned={false}
-          lines={['One saved pose in front of the inspection camera', 'Wrist stops at 0°, 90°, 180°']}
-          device="CPU"
-        />
-        <div style={{alignSelf: 'center'}}>
-          <Arrow length={40} />
-        </div>
-        <Stage
-          name="Inspect"
-          learned={false}
-          lines={[
-            'Anomalib PatchCore, median of 3 frames per stop',
-            'A defective stop rejects at once; an unsure stop gets a second look; still unsure → defective',
+const S2: React.FC = () => (
+  <Screen page={2} title="TASK" draftItems={DRAFT}>
+    <Col w={1010}>
+      <Faceplate title="TASK SPECIFICATION" pad={18}>
+        <Text size={24}>
+          A replayed or hard-coded motion only works with one brick in one place and one fixed target. Here the brick count, the
+          brick positions and the plate positions change from run to run.
+        </Text>
+        <KV
+          size={23}
+          labelW={330}
+          rows={[
+            ['BRICKS', 'any number, random position and rotation'],
+            ['TARGET SURFACE', 'two plates, movable: the task names the plate by colour'],
+            ['COORDINATES IN CODE', 'none'],
+            ['DEFECT CHECK', 'Anomalib, every brick, before sorting'],
+            ['OPERATOR INPUT', 'none during a run'],
           ]}
-          device={`${f.models.anomaly.device} · OpenVINO`}
         />
-        <div style={{alignSelf: 'center'}}>
-          <Arrow length={40} />
-        </div>
-        <Stage
-          name="Sort"
-          learned
-          lines={[`${f.models.sort.name}, told the verdict as its task`, 'Finds the plate of that colour, wherever it is']}
-          device={`${f.models.sort.device} · OpenVINO`}
+      </Faceplate>
+      <Faceplate title="TASK SENTENCES" hint="exact; the training data uses the same strings" grow={1} pad={18}>
+        <Tbl
+          head={['STAGE', 'TASK SENTENCE TO THE VLA']}
+          widths="250px 1fr"
+          size={22}
+          rows={[
+            ['Pick', `"${f.sentences.pick}"`],
+            [
+              <span key="g" style={{display: 'flex', gap: 10, alignItems: 'center'}}>
+                <Swatch colour={H.good} /> Sort, good
+              </span>,
+              `"${f.sentences.GOOD}"`,
+            ],
+            [
+              <span key="d" style={{display: 'flex', gap: 10, alignItems: 'center'}}>
+                <Swatch colour={H.reject} /> Sort, defective
+              </span>,
+              `"${f.sentences.DEFECTIVE}"`,
+            ],
+          ]}
         />
-      </div>
-      <div style={{display: 'flex', alignItems: 'center', gap: 20}}>
-        <Box colour={C.defective} style={{padding: '12px 18px'}}>
-          <Line size={26} mono colour={C.defective}>
-            DEFECTIVE
-          </Line>
-        </Box>
-        <Arrow length={60} colour={C.defective} />
-        <Box colour={C.defective} style={{padding: '12px 18px', flex: 1}}>
-          <Line size={26} mono>
-            task = "{f.sentences.DEFECTIVE}"
-          </Line>
-        </Box>
-        <Arrow length={60} colour={C.defective} />
-        <Box colour={C.stage} style={{padding: '12px 18px'}}>
-          <Line size={26}>{f.models.sort.name}</Line>
-        </Box>
-      </div>
-      <Note>
-        Inspection is scripted because anomaly detection needs the same view every time (slide 6). Safety: every policy step
-        is clamped (2 units per tick at the start of a stage, up to 12 within its first second), stages time out (pick 25 s,
-        sort 15 s), one key stops the arm, and Studio's device lock keeps other programs off it.
-      </Note>
+        <Text size={20} colour={H.muted}>
+          The verdict picks the sentence. The sentence names the target by its colour, not by a position, and the same policy
+          finds that plate.
+        </Text>
+      </Faceplate>
     </Col>
-  </Slide>
+    <Col>
+      <Faceplate title="TARGET SURFACES · WHERE THE PLATES STOOD IN TRAINING" hint={`${f.dataset.name}, top view`} grow={1}>
+        <CoveragePlot w={858} h={720} grasps={false} />
+        <Text size={19} colour={H.muted}>
+          Release points of all {coverage.releases.GOOD.length + coverage.releases.DEFECTIVE.length} sorts. The plates were moved
+          while recording: green {sides(coverage.releases.GOOD)}, orange {sides(coverage.releases.DEFECTIVE)} of the centre line.
+        </Text>
+      </Faceplate>
+    </Col>
+  </Screen>
 );
 
-const S4Policy: React.FC = () => (
-  <Slide num={4} title="The policy and the data it learned from" kicker="VLA · PHYSICAL AI STUDIO">
-    <Col gap={26}>
-      <div style={{display: 'flex', alignItems: 'center', gap: 14}}>
-        <Col width={250} gap={8}>
-          {['Top camera', 'Wrist camera', 'Joint state', 'Task sentence'].map((x) => (
-            <Box key={x} style={{padding: '8px 14px'}}>
-              <Line size={22}>{x}</Line>
-            </Box>
+// ── F3 PROCESS (the mimic) ────────────────────────────────────────────────────────────────
+
+const CameraIcon: React.FC<{x: number; y: number}> = ({x, y}) => (
+  <g transform={`translate(${x},${y})`} fill="none" stroke={H.strong} strokeWidth={3}>
+    <rect x={0} y={0} width={46} height={30} />
+    <path d="M 46 9 L 64 0 L 64 30 L 46 21" />
+  </g>
+);
+
+const ArmIcon: React.FC<{x: number; y: number}> = ({x, y}) => (
+  <g transform={`translate(${x},${y})`} fill="none" stroke="#fff" strokeWidth={3}>
+    <rect x={0} y={44} width={30} height={14} />
+    <path d="M 15 44 L 30 14 L 66 4 M 60 0 L 70 4 L 62 12" />
+  </g>
+);
+
+const S3: React.FC = () => (
+  <Screen page={3} title="PROCESS" draftItems={DRAFT}>
+    <Col>
+      <Faceplate title="PROCESS · BRICK INSPECTION AND SORTING" hint="learned where the scene varies, scripted where it must not" grow={1} pad={0}>
+        <svg width={1878} height={520} style={{display: 'block'}}>
+          <ArrowDefs />
+          <Equip x={40} y={110} w={300} h={190} title="PICK AREA" sub="bricks at random positions" dashed />
+          <TagBox x={40} y={318} w={300} k="BRICKS" v="any number" />
+          <TagBox x={40} y={354} w={300} k="POSITIONS" v="random" />
+          <Pipe d="M 340 205 L 430 205" />
+          <Equip x={440} y={90} w={360} h={230} title="SO-101 ARM" sub="VLA CONTROL · LEARNED" on icon={<ArmIcon x={585} y={210} />} />
+          <TagBox x={440} y={338} w={360} k="POLICY" v={`pi0.5 · ${model}`} />
+          <TagBox x={440} y={374} w={360} k="TASK" v={`"${f.sentences.pick}"`} />
+          <TagBox x={440} y={410} w={360} k="CHUNK" v={`${pol.chunk_ms_gpu} ms · GPU · OPENVINO`} />
+          <Pipe d="M 800 205 L 890 205" />
+          <Equip x={900} y={90} w={360} h={230} title="INSPECTION STN" sub="ANOMALIB · SCRIPTED POSE" icon={<CameraIcon x={1046} y={210} />} />
+          <TagBox x={900} y={338} w={360} k="STOPS" v={stopsText} />
+          <TagBox x={900} y={374} w={360} k="CROP" v="brick square, 360 px" />
+          <TagBox x={900} y={410} w={360} k="BANDS" v={`${lowBand.toFixed(2)} / ${highBand.toFixed(2)} · GPU`} />
+          <Pipe d="M 1260 205 L 1342 205" />
+          <polygon points="1400,147 1458,205 1400,263 1342,205" fill={H.strong} />
+          <text x={1400} y={211} textAnchor="middle" fontFamily={SANS} fontSize={17} fontWeight={700} fill="#fff">
+            VERDICT
+          </text>
+          <Pipe d="M 1400 147 L 1400 90 L 1500 90" />
+          <Pipe d="M 1400 263 L 1400 400 L 1500 400" />
+          <text x={1412} y={128} fontFamily={MONO} fontSize={15} fill={H.muted}>
+            task → VLA
+          </text>
+          <text x={1412} y={300} fontFamily={MONO} fontSize={15} fill={H.muted}>
+            task → VLA
+          </text>
+          {(
+            [
+              [30, H.good, 'GOOD', 'green plate · movable', '"…Put it on the green plate."'],
+              [340, H.reject, 'REJECT', 'orange plate · movable', '"…Put it on the orange plate."'],
+            ] as [number, string, string, string, string][]
+          ).map(([y, c, t, s, q]) => (
+            <g key={t}>
+              <rect x={1510} y={y} width={330} height={120} fill={H.panel} stroke={H.strong} strokeWidth={2} strokeDasharray="8 6" />
+              <rect x={1528} y={y + 20} width={20} height={20} fill={c} stroke={H.strong} />
+              <text x={1560} y={y + 38} fontFamily={SANS} fontSize={20} fontWeight={700} fill={H.text}>
+                {t}
+              </text>
+              <text x={1560} y={y + 64} fontFamily={SANS} fontSize={16} fill={H.muted}>
+                {s}
+              </text>
+              <text x={1528} y={y + 102} fontFamily={MONO} fontSize={14} fill={H.muted}>
+                {q}
+              </text>
+            </g>
           ))}
-        </Col>
-        <Arrow length={44} />
-        <Box colour={C.stage} style={{padding: '20px 24px'}}>
-          <Title size={34}>SmolVLA</Title>
-          <Line size={20} colour={C.dim}>
-            vision-language-action
-          </Line>
-        </Box>
-        <Arrow length={44} />
-        <Box style={{padding: '12px 16px'}}>
-          <Line size={22} mono>
-            50 joint actions
-          </Line>
-          <Line size={18} colour={C.dim}>
-            per chunk, 30 Hz
-          </Line>
-        </Box>
-      </div>
-      <Rows
-        rows={[
-          ['Training data', f.dataset.name],
-          ['Teleoperated episodes', <Value key="e" v={n.EPISODES} name="EPISODES" />],
-          ['Picks', <Value key="p" v={n.PICKS} name="PICKS" />],
-          ['Sorts: green / orange plate', `${coverageCounts.good} / ${coverageCounts.defective}`],
-          ['Recorded with', 'the leader arm, in Physical AI Studio'],
-          ['Fine-tuned on', 'Modal (H100), exported to OpenVINO'],
-        ]}
-        size={26}
-      />
-      <Note>
-        Each recorded flow is two episodes: a pick, then a sort with its sentence. The sentences were set after recording,
-        from where the brick really landed.
-      </Note>
-    </Col>
-    <Col width={680} gap={8}>
-      <CoverageMap size={620} delay={-10} />
-      <Note>
-        From above: {coverageCounts.grasps} grasps and {coverageCounts.good + coverageCounts.defective} releases in the
-        training data. Both plates appear on both sides of the table in all three recording batches. Forward kinematics,
-        good to a few cm.
-      </Note>
-    </Col>
-  </Slide>
-);
-
-const S5Data: React.FC = () => (
-  <Slide num={5} title="Data and training checks" kicker="DATASET & PIPELINE QUALITY">
-    <Col gap={20}>
-      <Line size={28}>Raw recordings stay untouched. Training uses cleaned copies.</Line>
-      <Rows
-        rows={[
-          ['Raw dataset main', '501 episodes, never edited'],
-          ['Cleaned copy main-clean3', '486 episodes (15 removed)'],
-          ['Sort labels: brick on the plate its sentence names?', '242 / 242'],
-          ['Picks: brick in the gripper at the end?', '244 / 244'],
-        ]}
-        size={25}
-      />
-      <Note>
-        Sort labels were checked by a script comparing top-camera frames before and after each sort; the 35 unclear cases
-        were checked by eye. Picks were checked on the last wrist-camera frame.
-      </Note>
-      <Box colour={C.unsure} style={{padding: '16px 20px'}}>
-        <Line size={26} colour={C.unsure}>
-          A training trap we found
-        </Line>
-        <Line size={23}>
-          Studio exports the epoch with the lowest validation loss. Our first SmolVLA shipped the epoch-3 snapshot (step
-          2,068 of 5,169, training loss still about 0.15 to 0.2) and moved jerkily on the arm. Fix: validation split 0, train
-          to the end. SmolVLA-v2: final checkpoint, 11,322 steps.
-        </Line>
-      </Box>
-    </Col>
-    <Col width={720} gap={14}>
-      <Line size={26}>Offline test on recorded episodes (shoulder_lift / elbow)</Line>
-      <div style={{display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', fontFamily: font, fontSize: 22}}>
-        {[
-          ['', 'v1 (epoch 3)', 'v2 (final)'],
-          ['Same input, 5 runs: spread (°)', '18–24 / 12–44', '11–15 / 11–18'],
-          ['Error vs teleop, next 50 actions (°)', '5–6 / 4–10', '2–5 / 3–6'],
-          ['Jerk, 99th percentile', '19.6 / 16.4', '8.5 / 7.6'],
-          ['Jerk with zero noise + blend', '1.6 / 1.3', '1.5 / 1.1'],
-          ['Jerk of the teleop itself', '2.1 / 1.7', ''],
-        ].map((row, i) =>
-          row.map((cell, j) => (
-            <div
-              key={`${i}-${j}`}
-              style={{
-                padding: '12px 8px',
-                borderBottom: `1px solid ${C.line}`,
-                color: i === 0 ? C.dim : j === 0 ? C.dim : C.text,
-                fontFamily: j === 0 ? font : monoFont,
-                textAlign: j === 0 ? 'left' : 'right',
-              }}
-            >
-              {cell}
-            </div>
-          )),
-        )}
-      </div>
-      <Note>
-        Jerk: change in speed per frame during asynchronous playback. Zero noise feeds SmolVLA an all-zero noise input; the
-        loop uses it.
-      </Note>
-    </Col>
-  </Slide>
-);
-
-const S6Inspection: React.FC = () => {
-  const images = data.run.images.slice(0, 2);
-  const bands = data.run.cycles[0]?.inspect?.bands ?? [0.4, 0.6];
-  const int8 = anomalyMs('INT8 weights', 'GPU');
-  const fp32 = anomalyMs('FP32', 'GPU');
-  return (
-    <Slide num={6} title="Inspection: the same view every time" kicker="ANOMALIB">
-      <Col gap={18}>
-        <Box colour={C.unsure} style={{padding: '14px 20px'}}>
-          <Line size={24}>
-            Why the pose is scripted: in our first photo set the arm held each brick in a different pose. A trial model
-            rejected 3 of 15 good bricks. Anomaly detection flags anything unlike its training photos, including the arm.
-          </Line>
-        </Box>
-        <Bullet>One saved show pose; the wrist turns to 0°, 90° and 180°</Bullet>
-        <Bullet>PatchCore scores the median of 3 frames at each stop</Bullet>
-        <Bullet>
-          Bands: good below {bands[0]}, unsure up to {bands[1]}, defective above. A defective stop rejects at once; an unsure
-          one gets a second look; still unsure means defective
-        </Bullet>
-        <Bullet>Trained on good bricks only, on the laptop's Intel GPU: 2.7 min for the slowest step vs 12 to 17 min on the CPU</Bullet>
-        <Bullet>
-          INT8 weight-only: {fp32?.size_mb ?? '[MB]'} MB to {int8?.size_mb ?? '[MB]'} MB, scores within{' '}
-          {int8 ? int8.score_diff_max.toFixed(2) : '[x]'} of FP32. Full INT8 moved scores by up to 0.28, so we don't use it
-        </Bullet>
-      </Col>
-      <Col width={700} gap={14}>
-        <div style={{display: 'flex', gap: 16, height: 340}}>
-          {[0, 1].map((i) =>
-            images[i] ? (
-              <div key={i} style={{flex: 1, borderRadius: 12, overflow: 'hidden', border: `2px solid ${C.line}`}}>
-                <Photo src={images[i].heat ?? images[i].photo} />
-              </div>
-            ) : (
-              <div key={i} style={{flex: 1, border: `2px dashed ${C.line}`, borderRadius: 12}} />
-            ),
-          )}
-        </div>
-        <Note>Heatmaps from a loop test run: the score is highest where the model sees something unusual.</Note>
-        <div style={{position: 'relative', height: 70, marginTop: 10}}>
-          <div style={{position: 'absolute', top: 10, left: 0, right: 0, height: 18, borderRadius: 9, overflow: 'hidden', display: 'flex'}}>
-            <div style={{width: `${bands[0] * 100}%`, background: C.good}} />
-            <div style={{width: `${(bands[1] - bands[0]) * 100}%`, background: C.unsure}} />
-            <div style={{flex: 1, background: C.defective}} />
-          </div>
-          <div style={{position: 'absolute', top: 38, left: 0, right: 0, display: 'flex', justifyContent: 'space-between', fontFamily: monoFont, fontSize: 20, color: C.dim}}>
-            <span>good</span>
-            <span>unsure</span>
-            <span>defective</span>
-          </div>
-        </div>
-        <Note>Scores are normalised so that 0.5 is the model's threshold.</Note>
-      </Col>
-    </Slide>
-  );
-};
-
-const S7Laptop: React.FC = () => {
-  const devices = ['GPU', 'NPU', 'CPU'] as const;
-  const rows: {label: string; cells: (number | null | string)[]; used: string}[] = [
-    {
-      label: 'SmolVLA, per 50-action chunk',
-      cells: devices.map((d) => (d === 'NPU' ? "won't compile" : ms(policyMs('SmolVLA', d)?.median_ms))),
-      used: f.models.sort.device,
-    },
-    {label: 'ACT pick, per 100-action chunk', cells: devices.map((d) => ms(policyMs('ACT', d)?.median_ms)), used: f.models.pick.name.startsWith('ACT') ? f.models.pick.device : ''},
-    {label: 'PatchCore FP32, per view', cells: devices.map((d) => ms(anomalyMs('FP32', d)?.median_ms)), used: f.models.anomaly.device},
-    {label: 'PatchCore INT8 weights, per view', cells: devices.map((d) => ms(anomalyMs('INT8 weights', d)?.median_ms)), used: ''},
-  ];
-  const smol = policyMs('SmolVLA', f.models.sort.device);
-  const headroom = smol?.p95_ms ? 833 / smol.p95_ms : null;
-  return (
-    <Slide num={7} title="On the laptop: each model where it runs best" kicker="OPENVINO · CORE ULTRA">
-      <Col gap={20}>
-        <div style={{display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 1fr', fontSize: 26}}>
-          {['Median latency (ms)', ...devices].map((h, i) => (
-            <div key={h} style={{fontFamily: i ? monoFont : font, color: C.dim, padding: '10px 8px', borderBottom: `1px solid ${C.line}`, textAlign: i ? 'right' : 'left'}}>
-              {h}
-            </div>
-          ))}
-          {rows.map((r) => [
-            <div key={r.label} style={{fontFamily: font, color: C.text, padding: '14px 8px', borderBottom: `1px solid ${C.line}`}}>
-              {r.label}
-            </div>,
-            ...r.cells.map((c, j) => {
-              const used = r.used === devices[j];
+          <text x={1675} y={250} textAnchor="middle" fontFamily={SANS} fontSize={16} fill={H.muted}>
+            placed by the same VLA,
+          </text>
+          <text x={1675} y={272} textAnchor="middle" fontFamily={SANS} fontSize={16} fill={H.muted}>
+            wherever the plate stands
+          </text>
+          <text x={1675} y={494} textAnchor="middle" fontFamily={SANS} fontSize={15} fill={H.muted}>
+            dashed: position not fixed
+          </text>
+        </svg>
+      </Faceplate>
+      <div style={{display: 'flex', gap: 10, height: 300}}>
+        <Faceplate title="SEQUENCE" hint={`one cycle · median ${res.median_cycle_s} s on the arm`} grow={1} pad={14}>
+          <div style={{display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6}}>
+            {[
+              ['10', 'HOME', 'scripted'],
+              ['20', 'PICK', `pi0.5 · ${res.median_pick_s} s`],
+              ['30', 'SHOW', 'scripted'],
+              ['40', 'INSPECT', `Anomalib · ${res.median_inspect_s} s`],
+              ['50', 'HOME', 'scripted'],
+              ['60', 'SORT', `pi0.5 · ${res.median_sort_s} s`],
+            ].map(([num, name, how]) => {
+              const learned = how.startsWith('pi0.5');
               return (
-                <div
-                  key={`${r.label}${j}`}
-                  style={{
-                    fontFamily: monoFont,
-                    color: typeof c === 'string' ? C.dim : used ? C.good : C.text,
-                    fontWeight: used ? 600 : 400,
-                    padding: '14px 8px',
-                    borderBottom: `1px solid ${C.line}`,
-                    textAlign: 'right',
-                    fontSize: typeof c === 'string' ? 20 : 26,
-                  }}
-                >
-                  {c === null ? '–' : c}
-                  {used ? ' ●' : ''}
+                <div key={num} style={{border: `1px solid ${H.strong}`, background: learned ? H.on : H.panel, color: learned ? '#fff' : H.text, textAlign: 'center', padding: '8px 0'}}>
+                  <div style={{fontFamily: MONO, fontSize: 15, color: learned ? '#d0d0d0' : H.faint}}>{num}</div>
+                  <div style={{fontSize: 21, fontWeight: 700}}>{name}</div>
+                  <div style={{fontSize: 15, color: learned ? '#d0d0d0' : H.muted}}>{how}</div>
                 </div>
               );
-            }),
-          ])}
-        </div>
-        <Note>● the device the loop uses. {f.laptop}, all models in OpenVINO.</Note>
-      </Col>
-      <Col width={640} gap={16}>
-        <Bullet size={25}>
-          SmolVLA runs on the GPU: it doesn't compile for the NPU and takes seconds on the CPU. With asynchronous chunking the
-          next chunk is requested 833 ms before it's needed; p95 latency {smol?.p95_ms ? Math.round(smol.p95_ms) : '[ms]'} ms gives{' '}
-          {headroom ? headroom.toFixed(1) : '[x]'}× headroom, so the arm never waits.
-        </Bullet>
-        <Bullet size={25}>ACT runs almost as fast on the NPU as on the GPU, so a pick on the NPU leaves the GPU to the other models.</Bullet>
-        <Bullet size={25}>PatchCore runs on the GPU while the brick is being shown, when no policy needs it.</Bullet>
-        <Bullet size={25}>Temperature, CPU, GPU and NPU load are logged every cycle. The package reached 90 to 97 °C under load.</Bullet>
-        {data.bench.contended.length > 0 && (
-          <Note>
-            <span style={{color: C.placeholder}}>Measured while the laptop was busy; to be re-measured on a quiet laptop.</span>
-          </Note>
-        )}
-      </Col>
-    </Slide>
-  );
-};
-
-const S8Results: React.FC = () => {
-  const ev = data.evaluation;
-  const row = (label: string, num: React.ReactNode): [React.ReactNode, React.ReactNode] => [label, num];
-  const frac = (a: keyof typeof n) => (
-    <>
-      <Value v={n[a]} name={a} /> / <Value v={n.M} name="M" />
-    </>
-  );
-  return (
-    <Slide num={8} title="Results over random layouts" kicker="EVALUATION ON THE ARM">
-      <Col gap={20}>
-        <Rows
-          rows={[
-            row('Random layouts', <Value v={n.R} name="R" />),
-            row('Cycles', <Value v={n.M} name="M" />),
-            row('Pick, first try', frac('P')),
-            row('Inspection verdict correct', frac('I')),
-            row('Placed on the plate it was told', frac('S')),
-            row('Correct end to end', frac('E')),
-            row('Median cycle', <Value v={n.X} name="X" digits={1} unit=" s" />),
-          ]}
-          size={30}
-        />
-        <Note>
-          Each round: 6 bricks (2 with marker defects) and both plates at positions from a random draw; the plates are swapped
-          by hand mid-run in at least one round. Every cycle counted, failures included.
-        </Note>
-        <Line size={24} colour={C.dim}>
-          Failures:{' '}
-          {ev.failures.length ? ev.failures.slice(0, 6).join(' · ') : <Value v={null} name="one line per failure" />}
-        </Line>
-      </Col>
-      <Col width={680} gap={8}>
-        <CoverageMap size={640} delay={-10} show={{grasps: true, releases: false}} trials={trials()} />
-        <Note>Test positions over the training grasps: ✓ brick on the correct plate, ✗ not.</Note>
-      </Col>
-    </Slide>
-  );
-};
-
-const S9Limits: React.FC = () => (
-  <Slide num={9} title="Limits and next steps" kicker="HONESTLY">
-    <Col gap={20}>
-      <Line size={32} colour={C.unsure}>
-        Where it's weak
-      </Line>
-      <Bullet>
-        New positions are the hard part. Offline, on 13 pick episodes neither model trained on, SmolVLA-v2 headed the right
-        way 8 times and ACT 6 times. Slide 8 measures it on the arm.
-      </Bullet>
-      <Bullet>
-        The soft gripper gives no grasp signal: it closes to about 3.5 on a brick and 2.6 on nothing. An empty grasp is only
-        caught at inspection.
-      </Bullet>
-      <Bullet>Inspection is trained on our bricks under one lamp. Other lighting or backdrops need new photos.</Bullet>
-      <Bullet>The laptop runs hot: 90 to 97 °C package temperature under load.</Bullet>
+            })}
+          </div>
+          <Text size={19} colour={H.muted}>
+            Filled: learned by the policy. Outline: scripted. Inspection is scripted because anomaly detection needs the same view
+            every time (INSPECTION, F6). Stage times are medians of {res.bricks_through_loop} bricks on the arm.
+          </Text>
+        </Faceplate>
+        <Faceplate title="INTERLOCKS AND RECOVERY" grow={1} pad={14}>
+          <KV
+            size={20}
+            labelW={250}
+            rows={[
+              ['STEP CLAMP', "2 → 12 units per tick over each stage's first second"],
+              ['STAGE TIMEOUT', `pick ${loop.pick_timeout_s ?? '–'} s · sort ${loop.sort_timeout_s ?? '–'} s: the arm stops, the operator resumes`],
+              ['UNSURE VIEW', 'second look; still unsure → reject'],
+              ['STOP', 'Esc / s: the arm holds position'],
+              ['DEVICE LOCK', "Studio's lock: one program drives the arm"],
+            ]}
+          />
+        </Faceplate>
+      </div>
     </Col>
-    <Col gap={20}>
-      <Line size={32} colour={C.good}>
-        What we'd do next
-      </Line>
-      <Bullet>Record more teleoperation at the positions where picks fail (the ✗ on slide 8).</Bullet>
-      <Bullet>Use the inspection photo to detect an empty gripper and pick again instead of sorting nothing.</Bullet>
-      <Bullet>More defect types: cracks, missing studs, wrong colours.</Bullet>
-      {f.models.pick.name.startsWith('ACT') && f.models.pick.device === 'NPU' ? (
-        <Bullet>Measure package power per cycle (it needs one permission change on the laptop that we haven't made).</Bullet>
-      ) : (
-        <Bullet>Move the pick to ACT on the NPU (17 ms per chunk) to leave the GPU to SmolVLA and inspection.</Bullet>
-      )}
-    </Col>
-  </Slide>
+  </Screen>
 );
 
-export const SLIDES: React.FC[] = [S1Title, S2Task, S3Cell, S4Policy, S5Data, S6Inspection, S7Laptop, S8Results, S9Limits];
+// ── F4 POLICY ─────────────────────────────────────────────────────────────────────────────
+
+const S4: React.FC = () => (
+  <Screen page={4} title="POLICY" draftItems={DRAFT}>
+    <Col w={1010}>
+      <Faceplate title={`VLA CONTROLLER · PI0.5 · ${model.toUpperCase()} · OPENVINO ${f.models.sort.device}`} pad={0}>
+        <svg width={1008} height={300} style={{display: 'block'}}>
+          <ArrowDefs />
+          {['TOP CAMERA · RealSense D415', 'WRIST CAMERA', 'JOINT STATE · J1–J6', 'TASK SENTENCE'].map((label, i) => (
+            <g key={label}>
+              <rect x={24} y={28 + i * 64} width={330} height={46} fill={H.display} stroke="#9a9a9a" />
+              <text x={40} y={58 + i * 64} fontFamily={SANS} fontSize={18} fontWeight={700} fill={H.text}>
+                {label}
+              </text>
+              <Pipe d={`M 354 ${51 + i * 64} L 430 ${51 + i * 64} L 430 150 L 470 150`} arrow={i === 1} />
+            </g>
+          ))}
+          <rect x={480} y={92} width={220} height={116} fill={H.on} stroke={H.strong} strokeWidth={2} />
+          <text x={590} y={144} textAnchor="middle" fontFamily={SANS} fontSize={28} fontWeight={700} fill="#fff">pi0.5</text>
+          <text x={590} y={172} textAnchor="middle" fontFamily={SANS} fontSize={15} fill="#d0d0d0">vision-language-action</text>
+          <text x={590} y={192} textAnchor="middle" fontFamily={MONO} fontSize={13} fill="#d0d0d0">images 224 × 224</text>
+          <Pipe d="M 700 150 L 770 150" />
+          <rect x={780} y={104} width={204} height={92} fill={H.display} stroke="#9a9a9a" />
+          <text x={796} y={138} fontFamily={MONO} fontSize={17} fill={H.text}>50 actions × 6</text>
+          <text x={796} y={164} fontFamily={MONO} fontSize={15} fill={H.muted}>per chunk, 30 Hz</text>
+          <text x={796} y={186} fontFamily={MONO} fontSize={15} fill={H.muted}>{pol.chunk_ms_gpu} ms, async</text>
+        </svg>
+      </Faceplate>
+      <Faceplate title="TRAINING" grow={1} pad={16}>
+        <KV
+          size={22}
+          labelW={320}
+          rows={[
+            ['TRAINING DATA', f.dataset.name],
+            ['EPISODES', <Val key="e" v={n.EPISODES} name="EPISODES" />],
+            ['PICKS / SORTS', <span key="ps"><Val v={n.PICKS} name="PICKS" /> / <Val v={n.SORTS} name="SORTS" /></span>],
+            ['SORTS · GREEN / ORANGE', `${coverage.releases.GOOD.length} / ${coverage.releases.DEFECTIVE.length}`],
+            ['TRAINING RUN', '8 × H100 on Modal · 4 epochs · 5,116 steps'],
+            ['CHECKPOINT', 'final weights, validation split 0'],
+            ['IMAGE AUGMENTATION', 'off (see LIMITS, F9)'],
+            ['RECORDED WITH', 'leader arm, Physical AI Studio'],
+            ['ON THE LAPTOP', `${pol.chunk_ms_gpu} ms per chunk, GPU, measured on the arm`],
+          ]}
+        />
+      </Faceplate>
+    </Col>
+    <Col>
+      <Faceplate title="TRAINING DATA · GRASP AND RELEASE POINTS" hint="top view, forward kinematics, ± a few cm" grow={1}>
+        <CoveragePlot w={858} h={700} />
+        <Text size={19} colour={H.muted}>
+          Bricks were picked all over the table, and both plates appear on both sides of the centre line: green{' '}
+          {sides(coverage.releases.GOOD)}, orange {sides(coverage.releases.DEFECTIVE)}.
+        </Text>
+      </Faceplate>
+    </Col>
+  </Screen>
+);
+
+// ── F5 DATA ───────────────────────────────────────────────────────────────────────────────
+
+const S5: React.FC = () => (
+  <Screen page={5} title="DATA" draftItems={DRAFT}>
+    <Col w={930}>
+      <Faceplate title="DATASET PIPELINE" pad={16}>
+        <KV
+          size={21}
+          labelW={430}
+          rows={[
+            ['RAW · main', '501 episodes, never edited'],
+            ['CLEANED · main-clean3', '486 episodes (15 removed)'],
+            ['SORT LABELS CHECKED', '242 / 242 correct'],
+            ['PICKS CHECKED · BRICK IN GRIPPER', '244 / 244'],
+            ['TRAINING SET · main-clean4', '424: main-clean3 minus 62 picks ending at home'],
+            ['NEW RECORDING · one-clean', '298 single-brick episodes (193 / 58 / 47)'],
+          ]}
+        />
+        <Text size={18} colour={H.muted}>
+          Sort labels: a script compares the top camera before the pick and after the sort to see which plate changed; the 35
+          unclear cases were checked by eye. Picks: the last wrist-camera frame of each. Cleaning goes through Studio's API.
+        </Text>
+      </Faceplate>
+      <Faceplate title="FINDINGS" grow={1} pad={12}>
+        <Events
+          size={18}
+          tagW={180}
+          rows={[
+            {prio: 2, tag: 'TRAIN.CKPT', msg: 'Studio kept the best-validation epoch: the first SmolVLA shipped epoch 3 and moved jerkily. Fixed: validation split 0, final weights.'},
+            {prio: 3, tag: 'DATA.ENDING', msg: '62 of 244 picks ended at home, 182 lifted. main-clean4 drops the 62, so every pick ends lifted.'},
+            {prio: 3, tag: 'DATA.LABEL', msg: 'Two episodes held a pick and a sort but were labelled as picks: removed.'},
+            {prio: 2, tag: 'CAM.TOP', msg: 'The top camera moved about 20 px after recording; pi0.5 was trained with image augmentation off.'},
+          ]}
+        />
+      </Faceplate>
+    </Col>
+    <Col>
+      <Faceplate title="MODEL HISTORY" hint="every model trained in Physical AI Studio on Modal" grow={1} pad={16}>
+        <Tbl
+          head={['MODEL', 'DATA', 'STEPS', 'RESULT']}
+          widths="1.25fr 1.1fr 0.7fr 2fr"
+          size={19}
+          rows={[
+            ['SmolVLA', 'main-clean · 108', '2,068', 'epoch-3 snapshot: jerky on the arm'],
+            ['SmolVLA-v2', 'main-clean2 · 315', '11,322', 'offline jerk 8.5 / 7.6 (v1: 19.6 / 16.4)'],
+            ['SmolVLA-v2-long', 'main-clean2 · 315', '20,757', 'offline jerk 6.1 / 5.0'],
+            ['ACT-pick-v1', 'main-picks · 158', '18,120', 'offline: pick only, 15 ms GPU / 17 ms NPU'],
+            [<b key="p">{model}</b>, `${f.dataset.name} · ${n.EPISODES ?? '–'}`, '5,116', <b key="r">on the arm: {res.verdicts_correct} / {res.bricks_through_loop} verdicts, {res.picks_ok} / {res.pick_attempts} picks</b>],
+            ['Pi0.5-one-8gpu-b', 'one-clean · 298', '–', 'trained 23:17, not measured yet'],
+          ]}
+        />
+        <Text size={17} colour={H.muted}>
+          Jerk: 99th percentile of the change in speed per frame (shoulder_lift / elbow) on recorded episodes. Source:
+          MODEL_RUN_NOTES.md, Studio's database.
+        </Text>
+      </Faceplate>
+    </Col>
+  </Screen>
+);
+
+// ── F6 INSPECTION ─────────────────────────────────────────────────────────────────────────
+
+const OSD: React.FC<{text: string}> = ({text}) => (
+  <span style={{position: 'absolute', left: 8, top: 6, fontFamily: MONO, fontSize: 15, color: '#fff', textShadow: '1px 1px 0 #000, -1px -1px 0 #000'}}>{text}</span>
+);
+
+const S6: React.FC = () => {
+  const clean = byCycle(CLEAN);
+  const marked = byCycle(MARKED);
+  const rows: React.ReactNode[][] = [];
+  for (const [c, what] of [
+    [clean, 'clean'],
+    [marked, 'marker'],
+  ] as [Cycle | undefined, string][]) {
+    for (const s of c?.inspect?.stops ?? []) {
+      rows.push([`C${c?.cycle} · ${what}`, deg(s.deg), s.median.toFixed(3), String(insp.frames_per_stop), s.label]);
+    }
+  }
+  return (
+    <Screen page={6} title="INSPECTION" draftItems={DRAFT}>
+      <Col w={1010}>
+        <Faceplate title={`INSPECTION STATION · ANOMALIB PATCHCORE · OPENVINO ${f.models.anomaly.device}`} hint={`two bricks from loop run ${data.run.folder?.split('/').pop()}`} pad={16}>
+          <div style={{display: 'flex', alignItems: 'baseline', gap: 16}}>
+            <span style={{fontSize: 40, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 12}}>
+              <Swatch colour={H.reject} size={22} />
+              {marked?.inspect?.verdict ?? '—'}
+            </span>
+            {marked && <span style={{fontFamily: MONO, fontSize: 19, color: H.muted}}>C{MARKED} · worst {worst(marked).toFixed(2)} · rejected at the first stop</span>}
+          </div>
+          <Gauge value={marked ? Math.min(worst(marked), 1) : null} bands={[lowBand, highBand]} width={974} />
+          <Tbl head={['BRICK', 'VIEW', 'MEDIAN', 'FRAMES', 'RESULT']} widths="1.3fr 0.7fr 1fr 0.8fr 1.2fr" size={20} rows={rows} />
+        </Faceplate>
+        <Faceplate title="SETTINGS" grow={1} pad={14}>
+          <KV
+            size={19}
+            labelW={260}
+            rows={[
+              ['CROP', insp.crop],
+              ['STOPS', `${stopsText} · the faces no gripper finger covers`],
+              ['SCORE PER STOP', `median of ${insp.frames_per_stop} frames`],
+              ['BANDS', `GOOD < ${lowBand.toFixed(2)} · DEFECTIVE > ${highBand.toFixed(2)} · between: second look, then reject`],
+              ['HELD-OUT CHECK', '28 photos at the stops (14 clean, 14 marked): no overlap'],
+              ['', 'highest clean 0.491 · lowest marked 0.588'],
+              ['TRAINING', `${insp.train_photos} good photos (${insp.train_photos_at_show_pose} at the show pose) · ${insp.train_time.split(' (')[0]}`],
+              ['INT8, WEIGHTS ONLY', `${insp.int8.split(',')[0]} · Δscore ≤ 0.05 · full INT8 not used (0.28)`],
+            ]}
+          />
+        </Faceplate>
+      </Col>
+      <Col>
+        <Faceplate title="WHY ONLY THE BRICK IS SCORED" pad={12}>
+          <Events
+            size={18}
+            tagW={150}
+            rows={[
+              {prio: 2, tag: 'INSP.CROP', msg: 'First live run: a clean brick scored 1.0. The heat was on the camera bracket and the table, not the brick: the model scored the whole crop.'},
+              {prio: 3, tag: 'INSP.FIX', msg: 'Each frame is cut to a 360 px square around the brick, found at the red finger tips, so photos from any arm pose train the same view.'},
+              {prio: 3, tag: 'INSP.FINGER', msg: 'At 0° and 180° a gripper finger hides the brick, so the stops are 90° and −90°.'},
+            ]}
+          />
+        </Faceplate>
+        <Faceplate title="CAM 03 · INSPECTION · ANOMALIB OVERLAY" hint="before: whole crop · after: brick square" grow={1} pad={10}>
+          <div style={{display: 'flex', gap: 8, flex: 1, minHeight: 0}}>
+            {(
+              [
+                ['deck/first_live_failure_heat.jpg', 'BEFORE · whole crop · 1.00'],
+                [`inspect/c${String(CLEAN).padStart(3, '0')}_90deg_heat.jpg`, `C${CLEAN} · clean · ${clean ? worst(clean).toFixed(2) : '–'}`],
+                [`inspect/c${String(MARKED).padStart(3, '0')}_90deg_heat.jpg`, `C${MARKED} · marker · ${marked ? worst(marked).toFixed(2) : '–'}`],
+              ] as [string, string][]
+            ).map(([src, label]) => (
+              <div key={src} style={{flex: 1, background: '#111', position: 'relative'}}>
+                <Photo src={src} style={{objectFit: 'contain'}} />
+                <OSD text={label} />
+              </div>
+            ))}
+          </div>
+          <Text size={17} colour={H.muted}>
+            Heatmap: where the model sees something unlike its training photos. White box: the brick square that is scored. Scores
+            are normalised so that 0.5 is the model's threshold.
+          </Text>
+        </Faceplate>
+      </Col>
+    </Screen>
+  );
+};
+
+// ── F7 COMPUTE ────────────────────────────────────────────────────────────────────────────
+
+type Row = {label: string; vals: (number | null | string)[]; used: string; note?: string};
+
+/** Latency per model and device on a log axis (1 ms to 10 s); the device the loop uses is filled. */
+const LogBars: React.FC<{rows: Row[]; devices: readonly string[]; w: number}> = ({rows, devices, w}) => {
+  const left = 300;
+  const span = w - left - 120;
+  const x = (v: number) => left + (Math.log10(Math.max(v, 1)) / 4) * span;
+  const rowH = 22;
+  const groupH = devices.length * rowH + 12;
+  const h = rows.length * groupH + 30;
+  return (
+    <svg width={w} height={h} style={{display: 'block'}}>
+      {[1, 10, 100, 1000, 10000].map((v) => (
+        <g key={v}>
+          <line x1={x(v)} x2={x(v)} y1={0} y2={h - 22} stroke={H.rule} />
+          <text x={x(v)} y={h - 5} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={H.muted}>
+            {v >= 1000 ? `${v / 1000} s` : `${v} ms`}
+          </text>
+        </g>
+      ))}
+      {rows.map((r, i) => (
+        <g key={r.label} transform={`translate(0, ${i * groupH + 4})`}>
+          <text x={0} y={rowH + 2} fontFamily={SANS} fontSize={16} fontWeight={700} fill={H.text}>
+            {r.label.split(' · ')[0]}
+          </text>
+          {devices.map((d, j) => {
+            const v = r.vals[j];
+            const y = j * rowH;
+            const used = r.used === d;
+            return (
+              <g key={d}>
+                <text x={left - 12} y={y + 16} textAnchor="end" fontFamily={MONO} fontSize={13} fill={H.muted}>
+                  {d}
+                </text>
+                {typeof v === 'number' ? (
+                  <>
+                    <rect x={left} y={y + 3} width={x(v) - left} height={16} fill={used ? H.on : '#b4b4b4'} stroke={H.strong} strokeWidth={1} />
+                    <text x={x(v) + 8} y={y + 16} fontFamily={MONO} fontSize={14} fill={H.text}>
+                      {v} ms
+                    </text>
+                  </>
+                ) : (
+                  <text x={left + 4} y={y + 16} fontFamily={MONO} fontSize={14} fill={H.muted}>
+                    {v ?? 'not measured'}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </g>
+      ))}
+    </svg>
+  );
+};
+
+/** One action chunk in asynchronous execution: when the next one is requested and when it arrives. */
+const ChunkTiming: React.FC<{w: number; fps: number; inferMs: number}> = ({w, fps, inferMs}) => {
+  const chunkMs = Math.round((50 / fps) * 1000);
+  const requestAt = chunkMs - Math.round((25 / fps) * 1000);
+  const x = (t: number) => 20 + (t / (chunkMs * 1.08)) * (w - 40);
+  const arrive = requestAt + inferMs;
+  return (
+    <svg width={w} height={190} style={{display: 'block'}}>
+      <ArrowDefs />
+      <text x={20} y={22} fontFamily={SANS} fontSize={15} fontWeight={700} fill={H.muted} letterSpacing=".05em">
+        ARM PLAYS THE CURRENT CHUNK · 50 ACTIONS AT {fps} HZ
+      </text>
+      <rect x={x(0)} y={34} width={x(chunkMs) - x(0)} height={30} fill={H.display} stroke={H.strong} />
+      {Array.from({length: 51}, (_, i) => (
+        <line key={i} x1={x((i * chunkMs) / 50)} x2={x((i * chunkMs) / 50)} y1={i % 5 ? 56 : 48} y2={64} stroke={H.faint} />
+      ))}
+      <line x1={x(requestAt)} x2={x(requestAt)} y1={28} y2={150} stroke={H.text} strokeWidth={2} strokeDasharray="5 4" />
+      <text x={x(requestAt) + 6} y={86} fontFamily={MONO} fontSize={15} fill={H.text}>
+        request next chunk (25 left)
+      </text>
+      <rect x={x(requestAt)} y={100} width={x(arrive) - x(requestAt)} height={24} fill={H.on} />
+      <text x={x(arrive) + 8} y={118} fontFamily={MONO} fontSize={15} fill={H.text}>
+        pi0.5 computes it: {Math.round(inferMs)} ms
+      </text>
+      <Pipe d={`M ${x(arrive)} 136 L ${x(chunkMs) - 2} 136`} />
+      <text x={x(arrive) + 6} y={160} fontFamily={MONO} fontSize={15} fill={H.text}>
+        {chunkMs - Math.round(arrive)} ms to spare
+      </text>
+      <text x={x(0)} y={182} fontFamily={MONO} fontSize={13} fill={H.muted}>0</text>
+      <text x={x(chunkMs)} y={182} fontFamily={MONO} fontSize={13} fill={H.muted} textAnchor="end">{chunkMs} ms</text>
+    </svg>
+  );
+};
+
+const S7: React.FC = () => {
+  const devices = ['GPU', 'NPU', 'CPU'] as const;
+  const now: Row[] = [
+    {label: `pi0.5 · ${model} · 50-action chunk`, vals: [pol.chunk_ms_gpu, null, null], used: 'GPU'},
+    {label: 'PatchCore · brick square · one photo', vals: [insp.ms_gpu_loop, insp.ms_npu, insp.ms_cpu], used: f.models.anomaly.device},
+  ];
+  const earlier: Row[] = [
+    {label: 'SmolVLA-v2 · 50-action chunk', vals: [ms(bench('SmolVLA', 'GPU')), "won't compile", ms(bench('SmolVLA', 'CPU'))], used: ''},
+    {label: 'ACT-pick-v1 · 100-action chunk', vals: [ms(bench('ACT', 'GPU')), ms(bench('ACT', 'NPU')), ms(bench('ACT', 'CPU'))], used: ''},
+  ];
+  const cell = (r: Row) => {
+    const nums = r.vals.filter((v): v is number => typeof v === 'number');
+    const best = nums.length > 1 ? Math.min(...nums) : null;
+    return [
+      r.label,
+      ...r.vals.map((v, j) => (
+        <span key={j} style={{textDecoration: typeof v === 'number' && v === best ? 'underline' : 'none', fontWeight: r.used === devices[j] ? 700 : 400, color: typeof v === 'number' ? H.text : H.muted}}>
+          {v === null ? '–' : v}
+          {r.used === devices[j] ? ' ■' : ''}
+        </span>
+      )),
+    ];
+  };
+  const budget = Math.round((25 / loop.fps) * 1000);
+  const alarms: Ev[] = [
+    {prio: 2, tag: 'NODE.TEMP', msg: `${res.thermal.split(' (')[0]}; alarm at 90 °C. Laptop on mains, rested before runs.`},
+    {prio: 2, tag: 'BENCH.BUSY', msg: 'PatchCore CPU and NPU times were measured while the loop ran. Re-measure on a quiet laptop.'},
+  ];
+  return (
+    <Screen page={7} title="COMPUTE" draftItems={DRAFT}>
+      <Col w={1110}>
+        <Faceplate title="COMPUTE NODE · OPENVINO · ON-DEVICE" hint={`median latency per call, ms · ${f.laptop}`} grow={1} pad={14}>
+          <div style={{fontSize: 15, fontWeight: 700, letterSpacing: '.05em', color: H.muted}}>THE LOOP TONIGHT · MEASURED ON THE ARM</div>
+          <Tbl head={['MODEL', 'GPU', 'NPU', 'CPU']} widths="2.3fr 0.9fr 0.9fr 0.9fr" align={['l', 'r', 'r', 'r']} size={22} rows={now.map(cell)} />
+          <Text size={16} colour={H.muted}>
+            pi0.5: median of 97 policy stages. PatchCore GPU: {insp.ms_gpu_loop} ms (p95 {insp.ms_gpu_loop_p95}) over 210 photos in the loop.
+            ■: the device the loop uses. –: not measured.
+          </Text>
+          <div style={{fontSize: 15, fontWeight: 700, letterSpacing: '.05em', color: H.muted, marginTop: 4}}>EARLIER MODELS · BENCHMARK 13:24, BUSY LAPTOP</div>
+          <Tbl head={['MODEL', 'GPU', 'NPU', 'CPU']} widths="2.3fr 0.9fr 0.9fr 0.9fr" align={['l', 'r', 'r', 'r']} size={20} rows={earlier.map(cell)} />
+          <div style={{borderTop: `1px solid ${H.line}`, paddingTop: 8}}>
+            <div style={{fontSize: 15, fontWeight: 700, letterSpacing: '.05em', color: H.muted, marginBottom: 4}}>LATENCY · LOG SCALE · FILLED = USED BY THE LOOP</div>
+            <LogBars rows={[...now, ...earlier]} devices={devices} w={1080} />
+          </div>
+          <div style={{marginTop: 'auto'}}>
+            <Events size={18} tagW={160} rows={alarms} />
+          </div>
+        </Faceplate>
+      </Col>
+      <Col>
+        <Faceplate title="DEVICE ASSIGNMENT" grow={1} pad={16}>
+          <KV
+            size={20}
+            labelW={250}
+            rows={[
+              ['PI0.5 → GPU', `${pol.chunk_ms_gpu} ms per 50-action chunk, on the arm`],
+              ['CHUNK BUDGET', `${budget} ms · ×${(budget / pol.chunk_ms_gpu).toFixed(1)} on the median`],
+              ['EXECUTION', 'asynchronous: the next chunk is computed while the arm moves'],
+              ['PATCHCORE → GPU', `${insp.ms_gpu_loop} ms per photo, while no policy runs`],
+              ['ANOMALIB TRAINING', insp.train_time],
+              ['NPU', 'ACT pick benchmarked at 17 ms; not used by the pi0.5 loop'],
+              ['LOGGED EVERY CYCLE', 'package temperature, CPU / GPU / NPU load'],
+            ]}
+          />
+          <div style={{marginTop: 'auto', borderTop: `1px solid ${H.line}`, paddingTop: 10}}>
+            <ChunkTiming w={740} fps={loop.fps} inferMs={pol.chunk_ms_gpu} />
+          </div>
+        </Faceplate>
+      </Col>
+    </Screen>
+  );
+};
+
+// ── F8 RESULTS ────────────────────────────────────────────────────────────────────────────
+
+/** Worst stop score per inspected brick, in cycle order, against the bands: an HMI trend display. */
+const ScoreTrend: React.FC<{w: number; h: number}> = ({w, h}) => {
+  const pts = cycles.filter((c) => c.inspect?.stops?.length && c.cycle <= 85);
+  const left = 56;
+  const bottom = 34;
+  const x = (i: number) => left + 12 + (i / Math.max(pts.length - 1, 1)) * (w - left - 30);
+  const y = (v: number) => 12 + (1 - Math.min(v, 1)) * (h - bottom - 12);
+  return (
+    <div style={{background: H.display, border: '1px solid', borderColor: '#9a9a9a #f7f7f7 #f7f7f7 #9a9a9a'}}>
+      <svg width={w} height={h} style={{display: 'block'}}>
+        <rect x={left} y={y(lowBand)} width={w - left - 8} height={y(0) - y(lowBand)} fill={H.range} opacity={0.6} />
+        {[0, 0.25, 0.5, 0.75, 1].map((v) => (
+          <g key={v}>
+            <line x1={left} x2={w - 8} y1={y(v)} y2={y(v)} stroke={H.rule} />
+            <text x={left - 8} y={y(v) + 5} textAnchor="end" fontFamily={MONO} fontSize={13} fill={H.muted}>
+              {v.toFixed(2)}
+            </text>
+          </g>
+        ))}
+        {[lowBand, highBand].map((b) => (
+          <line key={b} x1={left} x2={w - 8} y1={y(b)} y2={y(b)} stroke={H.strong} strokeWidth={2} strokeDasharray={b === highBand ? '7 5' : undefined} />
+        ))}
+        <text x={w - 12} y={y(lowBand) + 18} textAnchor="end" fontFamily={MONO} fontSize={13} fill={H.text}>GOOD &lt; {lowBand.toFixed(2)}</text>
+        <text x={w - 12} y={y(highBand) - 8} textAnchor="end" fontFamily={MONO} fontSize={13} fill={H.text}>DEFECTIVE &gt; {highBand.toFixed(2)}</text>
+        {pts.map((c, i) => {
+          const v = worst(c);
+          const bad = c.inspect?.verdict === 'DEFECTIVE';
+          return bad ? (
+            <rect key={c.cycle} x={x(i) - 6} y={y(v) - 6} width={12} height={12} fill={H.reject} stroke={H.strong} />
+          ) : (
+            <circle key={c.cycle} cx={x(i)} cy={y(v)} r={6} fill={H.strong} />
+          );
+        })}
+        <text x={left} y={h - 10} fontFamily={MONO} fontSize={13} fill={H.muted}>
+          C{pts[0]?.cycle}
+        </text>
+        <text x={w - 8} y={h - 10} textAnchor="end" fontFamily={MONO} fontSize={13} fill={H.muted}>
+          C{pts[pts.length - 1]?.cycle} · {pts.length} bricks in this run
+        </text>
+      </svg>
+    </div>
+  );
+};
+
+const S8: React.FC = () => (
+  <Screen page={8} title="RESULTS" draftItems={DRAFT}>
+    <Col w={960}>
+      <Faceplate title="PRODUCTION · ON THE ARM, FINAL SETTINGS" hint={`${res.model} · bands ${lowBand} / ${highBand}`} pad={16}>
+        <KV
+          size={23}
+          labelW={430}
+          rows={[
+            ['BRICKS THROUGH THE FULL LOOP', String(res.bricks_through_loop)],
+            ['INSPECTION VERDICT CORRECT', `${res.verdicts_correct} / ${res.bricks_through_loop}`],
+            ['DEFECTIVE BRICKS REJECTED', `${res.defective_rejected[0]} / ${res.defective_rejected[1]}`],
+            ['CLEAN BRICKS ACCEPTED', `${res.clean_accepted[0]} / ${res.clean_accepted[1]}`],
+            ['PICKS OK', `${res.picks_ok} / ${res.pick_attempts}  (+${res.picks_stopped_by_operator} stopped by the operator)`],
+            ['MEDIAN PER BRICK', `${res.median_cycle_s} s`],
+            ['STAGES · PICK / INSPECT / SORT', `${res.median_pick_s} / ${res.median_inspect_s} / ${res.median_sort_s} s`],
+            ['LANDED ON THE TOLD PLATE', <Val key="l" v={res.placements_checked} name="NOT LOGGED" />],
+          ]}
+        />
+        <Text size={17} colour={H.muted}>
+          Runs {res.runs.map((r) => r.replace('loop/runs/', '')).join(', ')}. Every verdict checked by eye against the photos. A pick that
+          times out stops the arm until the operator resumes.
+        </Text>
+      </Faceplate>
+      <Faceplate title="EVENTS · FAILURES" grow={1} pad={12}>
+        <Events size={17} tagW={150} rows={failureEvents()} />
+      </Faceplate>
+    </Col>
+    <Col>
+      <Faceplate title="TREND · WORST STOP SCORE PER BRICK" hint={`loop run ${data.run.folder?.split('/').pop()}, cycles 1–85`} grow={1}>
+        <ScoreTrend w={888} h={640} />
+        <div style={{display: 'flex', gap: 24, fontSize: 17, color: H.muted, alignItems: 'center'}}>
+          <span style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+            <span style={{width: 12, height: 12, borderRadius: 6, background: H.strong, display: 'inline-block'}} /> accepted (GOOD)
+          </span>
+          <span style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+            <Swatch colour={H.reject} size={12} /> rejected (DEFECTIVE)
+          </span>
+          <span>shaded: good band</span>
+        </div>
+        <Text size={17} colour={H.muted}>
+          Rejected bricks between the lines were unsure at first and got a second look. Three of the rejected bricks were clean (see
+          INSP.FALSE).
+        </Text>
+      </Faceplate>
+    </Col>
+  </Screen>
+);
+
+// ── F9 LIMITS ─────────────────────────────────────────────────────────────────────────────
+
+const S9: React.FC = () => (
+  <Screen page={9} title="LIMITS" draftItems={DRAFT}>
+    <Col w={1050}>
+      <Faceplate title="ALARMS · KNOWN LIMITS" grow={1} pad={12}>
+        <Events
+          size={20}
+          tagW={180}
+          rows={[
+            ...failureEvents(),
+            {prio: 2, tag: 'NODE.TEMP', msg: `${res.thermal.split(' (')[0]}.`},
+            {prio: 3, tag: 'INSP.LIGHT', msg: 'Inspection is trained on our bricks under one lamp and backdrop. Other lighting needs new photos.'},
+          ]}
+        />
+      </Faceplate>
+    </Col>
+    <Col>
+      <Faceplate title="WORK ORDERS · NEXT" grow={1} pad={14}>
+        <Tbl
+          head={['WO', 'ACTION']}
+          widths="80px 1fr"
+          size={20}
+          rows={[
+            ['01', 'Put the top camera back where it was during recording, and train with image augmentation on.'],
+            ['02', 'Add good photos of long and tall bricks held at one end (the three false rejects).'],
+            ['03', 'Test Pi0.5-one-8gpu-b (298 new single-brick episodes) on the arm with the same counts.'],
+            ['04', 'Log where each brick lands (operator marks on the HMI) to count placements.'],
+            ['05', 'Detect an empty gripper in the inspection photo and pick again instead of sorting nothing.'],
+          ]}
+        />
+        <div style={{marginTop: 'auto'}}>
+          <Disp size={18}>All code, logs and numbers: the team repo · video/, loop/, anomaly/, bench/</Disp>
+        </div>
+      </Faceplate>
+    </Col>
+  </Screen>
+);
+
+export const SLIDES: React.FC[] = [S1, S2, S3, S4, S5, S6, S7, S8, S9];
 
 export const Deck: React.FC = () => (
-  <AbsoluteFill style={{background: C.bg}}>
+  <AbsoluteFill style={{background: H.bg}}>
     {SLIDES.map((S, i) => (
-      <Sequence key={i} from={i * SLIDE_FRAMES} durationInFrames={SLIDE_FRAMES} name={`slide ${i + 1}`}>
+      <Sequence key={i} from={i * SLIDE_FRAMES} durationInFrames={SLIDE_FRAMES} name={`page ${i + 1}`}>
         <S />
       </Sequence>
     ))}

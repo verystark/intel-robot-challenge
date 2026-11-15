@@ -5,7 +5,7 @@
   "scenes": {
     "s2": {
       "file": "vo/s2.wav",
-      "duration": 11.05,
+      "duration": 11.625,
       "draft": false,
       "words": [
         {
@@ -21,153 +21,163 @@
         {
           "text": "motion",
           "start": 0.825,
-          "end": 1.312
+          "end": 1.387
         },
         {
           "text": "only",
-          "start": 1.312,
-          "end": 1.637
+          "start": 1.387,
+          "end": 1.7
         },
         {
           "text": "works",
-          "start": 1.637,
-          "end": 2.075
+          "start": 1.7,
+          "end": 2.025
         },
         {
-          "text": "if",
-          "start": 2.075,
-          "end": 2.225
+          "text": "with",
+          "start": 2.025,
+          "end": 2.2
         },
         {
-          "text": "the",
-          "start": 2.225,
-          "end": 2.362
+          "text": "one",
+          "start": 2.2,
+          "end": 2.438
         },
         {
           "text": "brick",
-          "start": 2.362,
-          "end": 2.675
-        },
-        {
-          "text": "is",
-          "start": 2.675,
-          "end": 2.837
-        },
-        {
-          "text": "always",
-          "start": 2.837,
-          "end": 3.3
+          "start": 2.438,
+          "end": 2.812
         },
         {
           "text": "in",
-          "start": 3.3,
-          "end": 3.388
+          "start": 2.812,
+          "end": 2.975
         },
         {
-          "text": "the",
-          "start": 3.388,
-          "end": 3.513
-        },
-        {
-          "text": "same",
-          "start": 3.513,
-          "end": 3.85
+          "text": "one",
+          "start": 2.975,
+          "end": 3.2
         },
         {
           "text": "place.",
-          "start": 3.85,
-          "end": 4.575
+          "start": 3.2,
+          "end": 4.0
         },
         {
           "text": "Here",
-          "start": 4.675,
-          "end": 4.9
+          "start": 4.1,
+          "end": 4.325
         },
         {
-          "text": "nothing",
-          "start": 4.9,
-          "end": 5.275
+          "text": "the",
+          "start": 4.325,
+          "end": 4.463
         },
         {
-          "text": "is",
-          "start": 5.275,
-          "end": 5.463
-        },
-        {
-          "text": "fixed,",
-          "start": 5.463,
-          "end": 6.125
+          "text": "bricks",
+          "start": 4.463,
+          "end": 4.875
         },
         {
           "text": "and",
-          "start": 6.225,
-          "end": 6.338
+          "start": 4.875,
+          "end": 4.987
+        },
+        {
+          "text": "the",
+          "start": 4.987,
+          "end": 5.075
+        },
+        {
+          "text": "plates",
+          "start": 5.075,
+          "end": 5.5
+        },
+        {
+          "text": "can",
+          "start": 5.5,
+          "end": 5.662
+        },
+        {
+          "text": "be",
+          "start": 5.662,
+          "end": 5.862
+        },
+        {
+          "text": "anywhere,",
+          "start": 5.862,
+          "end": 6.7
+        },
+        {
+          "text": "and",
+          "start": 6.8,
+          "end": 6.912
         },
         {
           "text": "there",
-          "start": 6.338,
-          "end": 6.45
+          "start": 6.912,
+          "end": 7.013
         },
         {
           "text": "are",
-          "start": 6.45,
-          "end": 6.55
+          "start": 7.013,
+          "end": 7.1
         },
         {
           "text": "no",
-          "start": 6.55,
-          "end": 6.787
+          "start": 7.1,
+          "end": 7.338
         },
         {
           "text": "coordinates",
-          "start": 6.787,
-          "end": 7.45
+          "start": 7.338,
+          "end": 8.025
         },
         {
           "text": "in",
-          "start": 7.45,
-          "end": 7.562
+          "start": 8.025,
+          "end": 8.137
         },
         {
           "text": "our",
-          "start": 7.562,
-          "end": 7.737
+          "start": 8.137,
+          "end": 8.312
         },
         {
           "text": "code.",
-          "start": 7.737,
-          "end": 8.425
+          "start": 8.312,
+          "end": 9.025
         },
         {
           "text": "Picking",
-          "start": 8.537,
-          "end": 9.2
+          "start": 9.137,
+          "end": 9.762
         },
         {
           "text": "and",
-          "start": 9.2,
-          "end": 9.35
+          "start": 9.762,
+          "end": 9.9
         },
         {
           "text": "placing",
-          "start": 9.35,
-          "end": 9.863
+          "start": 9.9,
+          "end": 10.438
         },
         {
           "text": "are",
-          "start": 9.863,
-          "end": 10.0
+          "start": 10.438,
+          "end": 10.575
         },
         {
           "text": "learned.",
-          "start": 10.0,
-          "end": 10.75
+          "start": 10.575,
+          "end": 11.325
         }
       ]
     },
     "s3": {
       "file": "vo/s3.wav",
-      "duration": 14.975,
+      "duration": 17.9,
       "draft": false,
       "words": [
         {
@@ -178,310 +188,350 @@
         {
           "text": "policy",
           "start": 0.3,
-          "end": 0.825
+          "end": 0.8
         },
         {
           "text": "is",
-          "start": 0.825,
+          "start": 0.8,
           "end": 0.963
         },
         {
-          "text": "SmolVLA,",
+          "text": "pi0.5,",
           "start": 0.963,
-          "end": 2.525
+          "end": 2.675
         },
         {
           "text": "a",
-          "start": 2.65,
-          "end": 2.75
+          "start": 2.775,
+          "end": 2.875
         },
         {
           "text": "vision-language-action",
-          "start": 2.75,
-          "end": 3.875
+          "start": 2.875,
+          "end": 3.975
         },
         {
-          "text": "model.",
-          "start": 3.875,
-          "end": 4.525
+          "text": "model:",
+          "start": 3.975,
+          "end": 4.55
         },
         {
-          "text": "Camera",
-          "start": 4.638,
-          "end": 5.05
+          "text": "camera",
+          "start": 4.662,
+          "end": 5.075
         },
         {
           "text": "images,",
-          "start": 5.05,
-          "end": 5.775
+          "start": 5.075,
+          "end": 5.8
         },
         {
           "text": "joint",
-          "start": 5.888,
-          "end": 6.175
+          "start": 5.912,
+          "end": 6.225
         },
         {
           "text": "positions",
-          "start": 6.175,
-          "end": 6.85
+          "start": 6.225,
+          "end": 7.013
         },
         {
           "text": "and",
-          "start": 6.85,
-          "end": 6.963
+          "start": 7.013,
+          "end": 7.138
         },
         {
           "text": "a",
-          "start": 6.963,
-          "end": 7.062
+          "start": 7.138,
+          "end": 7.237
         },
         {
           "text": "task",
-          "start": 7.062,
-          "end": 7.5
+          "start": 7.237,
+          "end": 7.675
         },
         {
           "text": "sentence",
-          "start": 7.5,
-          "end": 7.95
+          "start": 7.675,
+          "end": 8.125
         },
         {
-          "text": "go",
-          "start": 7.95,
-          "end": 8.2
-        },
-        {
-          "text": "in;",
-          "start": 8.2,
-          "end": 8.7
+          "text": "in,",
+          "start": 8.125,
+          "end": 8.625
         },
         {
           "text": "joint",
-          "start": 8.812,
-          "end": 9.162
+          "start": 8.762,
+          "end": 9.113
         },
         {
           "text": "actions",
-          "start": 9.162,
-          "end": 9.675
-        },
-        {
-          "text": "come",
-          "start": 9.675,
-          "end": 9.9
+          "start": 9.113,
+          "end": 9.6
         },
         {
           "text": "out.",
-          "start": 9.9,
-          "end": 10.5
+          "start": 9.6,
+          "end": 10.3
         },
         {
           "text": "It's",
-          "start": 10.6,
-          "end": 10.8
+          "start": 10.4,
+          "end": 10.6
         },
         {
           "text": "fine-tuned",
-          "start": 10.8,
-          "end": 11.425
+          "start": 10.6,
+          "end": 11.162
         },
         {
           "text": "on",
-          "start": 11.425,
-          "end": 11.613
+          "start": 11.162,
+          "end": 11.338
         },
         {
-          "text": "315",
-          "start": 11.613,
-          "end": 12.812
+          "text": "424",
+          "start": 11.338,
+          "end": 12.4
         },
         {
-          "text": "teleoperated",
-          "start": 12.812,
-          "end": 13.688
+          "text": "episodes",
+          "start": 12.4,
+          "end": 13.238
         },
         {
-          "text": "episodes.",
-          "start": 13.688,
-          "end": 14.7
+          "text": "we",
+          "start": 13.238,
+          "end": 13.375
+        },
+        {
+          "text": "recorded",
+          "start": 13.375,
+          "end": 13.9
+        },
+        {
+          "text": "by",
+          "start": 13.9,
+          "end": 14.113
+        },
+        {
+          "text": "teleoperation,",
+          "start": 14.113,
+          "end": 15.325
+        },
+        {
+          "text": "with",
+          "start": 15.425,
+          "end": 15.562
+        },
+        {
+          "text": "the",
+          "start": 15.562,
+          "end": 15.65
+        },
+        {
+          "text": "plates",
+          "start": 15.65,
+          "end": 16.038
+        },
+        {
+          "text": "moved",
+          "start": 16.038,
+          "end": 16.425
+        },
+        {
+          "text": "around",
+          "start": 16.425,
+          "end": 16.738
+        },
+        {
+          "text": "the",
+          "start": 16.738,
+          "end": 16.837
+        },
+        {
+          "text": "table.",
+          "start": 16.837,
+          "end": 17.625
         }
       ]
     },
     "s4": {
       "file": "vo/s4.wav",
-      "duration": 13.95,
+      "duration": 13.25,
       "draft": false,
       "words": [
         {
           "text": "Inspection",
           "start": 0.25,
-          "end": 0.988
+          "end": 0.963
         },
         {
           "text": "is",
-          "start": 0.988,
-          "end": 1.15
+          "start": 0.963,
+          "end": 1.125
         },
         {
           "text": "the",
-          "start": 1.15,
-          "end": 1.288
+          "start": 1.125,
+          "end": 1.262
         },
         {
           "text": "one",
-          "start": 1.288,
-          "end": 1.637
+          "start": 1.262,
+          "end": 1.613
         },
         {
           "text": "scripted",
-          "start": 1.637,
-          "end": 2.125
+          "start": 1.613,
+          "end": 2.1
         },
         {
-          "text": "step.",
-          "start": 2.125,
-          "end": 2.825
+          "text": "step:",
+          "start": 2.1,
+          "end": 2.725
         },
         {
-          "text": "A",
-          "start": 2.938,
-          "end": 3.062
+          "text": "a",
+          "start": 2.837,
+          "end": 2.962
         },
         {
           "text": "fixed",
-          "start": 3.062,
-          "end": 3.413
+          "start": 2.962,
+          "end": 3.312
         },
         {
-          "text": "pose",
-          "start": 3.413,
-          "end": 3.938
+          "text": "pose,",
+          "start": 3.312,
+          "end": 4.025
         },
         {
           "text": "and",
-          "start": 3.938,
-          "end": 4.088
+          "start": 4.125,
+          "end": 4.237
         },
         {
-          "text": "three",
-          "start": 4.088,
-          "end": 4.35
+          "text": "the",
+          "start": 4.237,
+          "end": 4.338
         },
         {
-          "text": "wrist",
-          "start": 4.35,
-          "end": 4.625
+          "text": "two",
+          "start": 4.338,
+          "end": 4.662
         },
         {
-          "text": "angles",
-          "start": 4.625,
+          "text": "faces",
+          "start": 4.662,
+          "end": 5.125
+        },
+        {
+          "text": "the",
+          "start": 5.125,
           "end": 5.263
         },
         {
-          "text": "mean",
+          "text": "fingers",
           "start": 5.263,
-          "end": 5.463
+          "end": 5.763
         },
         {
-          "text": "the",
-          "start": 5.463,
-          "end": 5.575
+          "text": "don't",
+          "start": 5.763,
+          "end": 6.062
         },
         {
-          "text": "anomaly",
-          "start": 5.575,
-          "end": 6.138
-        },
-        {
-          "text": "model",
-          "start": 6.138,
-          "end": 6.55
-        },
-        {
-          "text": "sees",
-          "start": 6.55,
-          "end": 6.888
-        },
-        {
-          "text": "every",
-          "start": 6.888,
-          "end": 7.213
-        },
-        {
-          "text": "brick",
-          "start": 7.213,
-          "end": 7.5
-        },
-        {
-          "text": "the",
-          "start": 7.5,
-          "end": 7.638
-        },
-        {
-          "text": "same",
-          "start": 7.638,
-          "end": 7.975
-        },
-        {
-          "text": "way.",
-          "start": 7.975,
-          "end": 8.7
+          "text": "cover.",
+          "start": 6.062,
+          "end": 6.8
         },
         {
           "text": "Anomalib's",
-          "start": 8.863,
-          "end": 9.475
+          "start": 6.963,
+          "end": 7.588
         },
         {
-          "text": "PatchCore,",
-          "start": 9.475,
-          "end": 10.35
-        },
-        {
-          "text": "trained",
-          "start": 10.45,
-          "end": 10.812
-        },
-        {
-          "text": "only",
-          "start": 10.812,
-          "end": 11.113
-        },
-        {
-          "text": "on",
-          "start": 11.113,
-          "end": 11.275
-        },
-        {
-          "text": "good",
-          "start": 11.275,
-          "end": 11.5
-        },
-        {
-          "text": "bricks,",
-          "start": 11.5,
-          "end": 12.05
+          "text": "PatchCore",
+          "start": 7.588,
+          "end": 8.238
         },
         {
           "text": "scores",
-          "start": 12.162,
-          "end": 12.713
+          "start": 8.238,
+          "end": 8.887
         },
         {
-          "text": "each",
-          "start": 12.713,
-          "end": 13.037
+          "text": "only",
+          "start": 8.887,
+          "end": 9.2
         },
         {
-          "text": "view.",
-          "start": 13.037,
-          "end": 13.7
+          "text": "a",
+          "start": 9.2,
+          "end": 9.312
+        },
+        {
+          "text": "square",
+          "start": 9.312,
+          "end": 9.725
+        },
+        {
+          "text": "around",
+          "start": 9.725,
+          "end": 10.037
+        },
+        {
+          "text": "the",
+          "start": 10.037,
+          "end": 10.125
+        },
+        {
+          "text": "brick,",
+          "start": 10.125,
+          "end": 10.725
+        },
+        {
+          "text": "and",
+          "start": 10.825,
+          "end": 10.938
+        },
+        {
+          "text": "it",
+          "start": 10.938,
+          "end": 11.025
+        },
+        {
+          "text": "learned",
+          "start": 11.025,
+          "end": 11.4
+        },
+        {
+          "text": "from",
+          "start": 11.4,
+          "end": 11.613
+        },
+        {
+          "text": "good",
+          "start": 11.613,
+          "end": 11.85
+        },
+        {
+          "text": "bricks",
+          "start": 11.85,
+          "end": 12.213
+        },
+        {
+          "text": "only.",
+          "start": 12.213,
+          "end": 12.975
         }
       ]
     },
     "s5": {
       "file": "vo/s5.wav",
-      "duration": 8.1,
+      "duration": 8.75,
       "draft": false,
       "words": [
         {
@@ -497,160 +547,300 @@
         {
           "text": "becomes",
           "start": 0.75,
-          "end": 1.25
+          "end": 1.275
         },
         {
           "text": "the",
-          "start": 1.25,
-          "end": 1.387
+          "start": 1.275,
+          "end": 1.413
         },
         {
           "text": "VLA's",
-          "start": 1.387,
-          "end": 2.375
+          "start": 1.413,
+          "end": 2.425
         },
         {
           "text": "next",
-          "start": 2.375,
-          "end": 2.675
+          "start": 2.425,
+          "end": 2.725
         },
         {
           "text": "task",
-          "start": 2.675,
-          "end": 3.062
+          "start": 2.725,
+          "end": 3.112
         },
         {
           "text": "sentence.",
-          "start": 3.062,
-          "end": 4.0
+          "start": 3.112,
+          "end": 4.075
         },
         {
           "text": "The",
-          "start": 4.1,
-          "end": 4.2
+          "start": 4.175,
+          "end": 4.312
+        },
+        {
+          "text": "same",
+          "start": 4.312,
+          "end": 4.65
         },
         {
           "text": "model",
-          "start": 4.2,
-          "end": 4.525
+          "start": 4.65,
+          "end": 4.975
         },
         {
           "text": "then",
-          "start": 4.525,
-          "end": 4.825
+          "start": 4.975,
+          "end": 5.325
         },
         {
           "text": "finds",
-          "start": 4.825,
-          "end": 5.213
+          "start": 5.325,
+          "end": 5.713
         },
         {
           "text": "the",
-          "start": 5.213,
-          "end": 5.312
+          "start": 5.713,
+          "end": 5.812
         },
         {
           "text": "plate",
-          "start": 5.312,
-          "end": 5.612
+          "start": 5.812,
+          "end": 6.112
         },
         {
           "text": "of",
-          "start": 5.612,
-          "end": 5.7
+          "start": 6.112,
+          "end": 6.2
         },
         {
           "text": "that",
-          "start": 5.7,
-          "end": 5.963
+          "start": 6.2,
+          "end": 6.463
         },
         {
           "text": "colour,",
-          "start": 5.963,
-          "end": 6.475
+          "start": 6.463,
+          "end": 6.975
         },
         {
           "text": "wherever",
-          "start": 6.6,
-          "end": 7.0
+          "start": 7.075,
+          "end": 7.475
         },
         {
           "text": "it",
-          "start": 7.0,
-          "end": 7.175
+          "start": 7.475,
+          "end": 7.625
         },
         {
-          "text": "is.",
-          "start": 7.175,
-          "end": 7.825
+          "text": "stands.",
+          "start": 7.625,
+          "end": 8.475
         }
       ]
     },
     "s7": {
       "file": "vo/s7.wav",
-      "duration": 4.7,
-      "draft": true,
+      "duration": 15.775,
+      "draft": false,
       "words": [
         {
-          "text": "The",
+          "text": "On",
           "start": 0.225,
-          "end": 0.35
-        },
-        {
-          "text": "evaluation",
-          "start": 0.35,
-          "end": 1.075
-        },
-        {
-          "text": "results",
-          "start": 1.075,
-          "end": 1.562
-        },
-        {
-          "text": "go",
-          "start": 1.562,
-          "end": 1.825
-        },
-        {
-          "text": "here,",
-          "start": 1.825,
-          "end": 2.325
-        },
-        {
-          "text": "once",
-          "start": 2.425,
-          "end": 2.7
+          "end": 0.338
         },
         {
           "text": "the",
-          "start": 2.7,
-          "end": 2.837
+          "start": 0.338,
+          "end": 0.487
         },
         {
-          "text": "random",
-          "start": 2.837,
-          "end": 3.275
+          "text": "arm,",
+          "start": 0.487,
+          "end": 0.875
         },
         {
-          "text": "rounds",
-          "start": 3.275,
-          "end": 3.65
+          "text": "41",
+          "start": 0.963,
+          "end": 1.5
         },
         {
-          "text": "are",
-          "start": 3.65,
-          "end": 3.75
+          "text": "bricks",
+          "start": 1.5,
+          "end": 1.825
         },
         {
-          "text": "done.",
-          "start": 3.75,
-          "end": 4.425
+          "text": "went",
+          "start": 1.825,
+          "end": 2.025
+        },
+        {
+          "text": "through",
+          "start": 2.025,
+          "end": 2.225
+        },
+        {
+          "text": "the",
+          "start": 2.225,
+          "end": 2.35
+        },
+        {
+          "text": "whole",
+          "start": 2.35,
+          "end": 2.6
+        },
+        {
+          "text": "loop.",
+          "start": 2.6,
+          "end": 3.175
+        },
+        {
+          "text": "38",
+          "start": 3.288,
+          "end": 3.8
+        },
+        {
+          "text": "verdicts",
+          "start": 3.8,
+          "end": 4.225
+        },
+        {
+          "text": "were",
+          "start": 4.225,
+          "end": 4.35
+        },
+        {
+          "text": "right:",
+          "start": 4.35,
+          "end": 4.925
+        },
+        {
+          "text": "all",
+          "start": 5.025,
+          "end": 5.312
+        },
+        {
+          "text": "13",
+          "start": 5.312,
+          "end": 5.9
+        },
+        {
+          "text": "defective",
+          "start": 5.9,
+          "end": 6.45
+        },
+        {
+          "text": "bricks",
+          "start": 6.45,
+          "end": 6.775
+        },
+        {
+          "text": "rejected,",
+          "start": 6.775,
+          "end": 7.625
+        },
+        {
+          "text": "and",
+          "start": 7.725,
+          "end": 7.862
+        },
+        {
+          "text": "3",
+          "start": 7.862,
+          "end": 8.137
+        },
+        {
+          "text": "clean",
+          "start": 8.137,
+          "end": 8.475
+        },
+        {
+          "text": "ones",
+          "start": 8.475,
+          "end": 8.875
+        },
+        {
+          "text": "rejected",
+          "start": 8.875,
+          "end": 9.4
+        },
+        {
+          "text": "by",
+          "start": 9.4,
+          "end": 9.6
+        },
+        {
+          "text": "mistake.",
+          "start": 9.6,
+          "end": 10.525
+        },
+        {
+          "text": "41",
+          "start": 10.662,
+          "end": 11.225
+        },
+        {
+          "text": "of",
+          "start": 11.225,
+          "end": 11.363
+        },
+        {
+          "text": "55",
+          "start": 11.363,
+          "end": 11.975
+        },
+        {
+          "text": "picks",
+          "start": 11.975,
+          "end": 12.287
+        },
+        {
+          "text": "worked,",
+          "start": 12.287,
+          "end": 12.95
+        },
+        {
+          "text": "and",
+          "start": 13.05,
+          "end": 13.162
+        },
+        {
+          "text": "a",
+          "start": 13.162,
+          "end": 13.238
+        },
+        {
+          "text": "brick",
+          "start": 13.238,
+          "end": 13.588
+        },
+        {
+          "text": "takes",
+          "start": 13.588,
+          "end": 14.012
+        },
+        {
+          "text": "about",
+          "start": 14.012,
+          "end": 14.325
+        },
+        {
+          "text": "20",
+          "start": 14.325,
+          "end": 14.662
+        },
+        {
+          "text": "seconds.",
+          "start": 14.662,
+          "end": 15.5
         }
       ]
     },
     "s8": {
       "file": "vo/s8.wav",
-      "duration": 11.4,
+      "duration": 13.25,
       "draft": false,
       "words": [
         {
@@ -661,102 +851,117 @@
         {
           "text": "inference",
           "start": 0.45,
-          "end": 0.988
+          "end": 1.012
         },
         {
           "text": "runs",
-          "start": 0.988,
-          "end": 1.312
+          "start": 1.012,
+          "end": 1.337
         },
         {
           "text": "on",
-          "start": 1.312,
-          "end": 1.413
+          "start": 1.337,
+          "end": 1.438
         },
         {
           "text": "the",
-          "start": 1.413,
-          "end": 1.5
+          "start": 1.438,
+          "end": 1.525
         },
         {
           "text": "laptop",
-          "start": 1.5,
-          "end": 2.163
+          "start": 1.525,
+          "end": 2.212
         },
         {
           "text": "with",
-          "start": 2.163,
-          "end": 2.362
+          "start": 2.212,
+          "end": 2.413
         },
         {
           "text": "OpenVINO.",
-          "start": 2.362,
-          "end": 3.55
+          "start": 2.413,
+          "end": 3.6
         },
         {
-          "text": "SmolVLA",
-          "start": 3.75,
-          "end": 5.088
+          "text": "pi0.5",
+          "start": 3.788,
+          "end": 5.162
         },
         {
           "text": "takes",
-          "start": 5.088,
-          "end": 5.412
+          "start": 5.162,
+          "end": 5.737
         },
         {
-          "text": "214",
-          "start": 5.412,
-          "end": 6.375
+          "text": "about",
+          "start": 5.737,
+          "end": 6.062
+        },
+        {
+          "text": "240",
+          "start": 6.062,
+          "end": 6.9
         },
         {
           "text": "milliseconds",
-          "start": 6.375,
-          "end": 7.0
+          "start": 6.9,
+          "end": 7.525
         },
         {
           "text": "per",
-          "start": 7.0,
-          "end": 7.213
+          "start": 7.525,
+          "end": 7.737
+        },
+        {
+          "text": "action",
+          "start": 7.737,
+          "end": 8.338
         },
         {
           "text": "chunk",
-          "start": 7.213,
-          "end": 7.688
+          "start": 8.338,
+          "end": 8.713
         },
         {
           "text": "on",
-          "start": 7.688,
-          "end": 7.812
+          "start": 8.713,
+          "end": 8.812
         },
         {
           "text": "the",
-          "start": 7.812,
-          "end": 7.912
+          "start": 8.812,
+          "end": 8.912
         },
         {
           "text": "GPU;",
-          "start": 7.912,
-          "end": 8.8
+          "start": 8.912,
+          "end": 9.9
         },
         {
           "text": "PatchCore,",
-          "start": 8.9,
-          "end": 9.625
+          "start": 10.012,
+          "end": 10.9
         },
         {
-          "text": "18",
-          "start": 9.725,
-          "end": 10.275
+          "text": "about",
+          "start": 11.0,
+          "end": 11.338
+        },
+        {
+          "text": "34",
+          "start": 11.338,
+          "end": 11.925
         },
         {
           "text": "per",
-          "start": 10.275,
-          "end": 10.475
+          "start": 11.925,
+          "end": 12.137
         },
         {
-          "text": "view.",
-          "start": 10.475,
-          "end": 11.15
+          "text": "photo.",
+          "start": 12.137,
+          "end": 12.975
         }
       ]
     }

@@ -1,24 +1,29 @@
-import {loadFont as loadInter} from '@remotion/google-fonts/Inter';
-import {loadFont as loadMono} from '@remotion/google-fonts/JetBrainsMono';
+// The video uses the cell's operator-screen look (loop/dashboard, after ISA-101): grey when
+// normal, colour only for plate identity and abnormal states. Colours come from the dashboard's
+// palette.json; fonts are the HMI's (Arial / Liberation Sans, DejaVu Sans Mono), installed locally.
+import palette from '../../loop/dashboard/palette.json';
 
-const inter = loadInter('normal', {weights: ['400', '600', '700'], subsets: ['latin']});
-const mono = loadMono('normal', {weights: ['400', '600'], subsets: ['latin']});
+const p = palette.hmi;
 
-export const font = inter.fontFamily;
-export const monoFont = mono.fontFamily;
+export const font = 'Arial, "Liberation Sans", Helvetica, "DejaVu Sans", sans-serif';
+export const monoFont = '"DejaVu Sans Mono", "Liberation Mono", "Courier New", monospace';
 
-// Dark grey like the loop's demo screen; plate colours for the verdicts.
 export const C = {
-  bg: '#18181C',
-  panel: '#26262C',
-  line: '#3A3A42',
-  text: '#EBEBEB',
-  dim: '#96969B',
-  good: '#2EC4A6', // the teal "green" plate
-  defective: '#FF7A1A', // the orange plate
-  unsure: '#E8C547',
-  stage: '#3D8BD9', // active stage, as on the loop screen
-  placeholder: '#E8C547',
+  bg: p.background,
+  panel: p.panel,
+  display: p.display,
+  line: p.line,
+  strong: p.equipment_on,
+  text: p.text,
+  dim: p.muted,
+  head: '#cfcfcf',
+  top: '#3e3e3e',
+  good: p.plate_good, // the teal "green" plate
+  defective: p.plate_reject, // the orange plate
+  unsure: p.alarm_medium,
+  alarm: p.alarm_high,
+  stage: p.equipment_on, // an active stage is filled dark grey, as on the HMI
+  placeholder: p.alarm_medium,
 };
 
 export const verdictColour = (v: string | undefined) =>

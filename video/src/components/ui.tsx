@@ -1,45 +1,27 @@
 import React from 'react';
-import {
-  AbsoluteFill,
-  Easing,
-  Img,
-  OffthreadVideo,
-  interpolate,
-  staticFile,
-  useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
+import {AbsoluteFill, Easing, Img, OffthreadVideo, interpolate, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
 import {Num, Word, data, timings, VO_LEAD_S} from '../data';
 import {C, font, monoFont} from '../theme';
 
 const ease = Easing.bezier(0.33, 0, 0.2, 1);
 
-/** Fades and slides its children in, starting `delay` seconds into the scene. */
+/** Fades its children in, starting `delay` seconds into the scene. No sliding: the HMI doesn't move. */
 export const Appear: React.FC<{delay?: number; dy?: number; children: React.ReactNode; style?: React.CSSProperties}> = ({
   delay = 0,
-  dy = 16,
+  dy = 0,
   children,
   style,
 }) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const t = interpolate(frame, [delay * fps, delay * fps + 0.45 * fps], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-    easing: ease,
-  });
-  return <div style={{opacity: t, transform: `translateY(${(1 - t) * dy}px)`, ...style}}>{children}</div>;
+  const t = interpolate(frame, [delay * fps, delay * fps + 0.3 * fps], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: ease});
+  return <div style={{opacity: t, transform: dy ? `translateY(${(1 - t) * dy}px)` : undefined, ...style}}>{children}</div>;
 };
 
-/** A measured number, or a visibly marked placeholder while it isn't measured yet. */
-export const Value: React.FC<{v: Num | string | undefined; name: string; digits?: number; unit?: string}> = ({
-  v,
-  name,
-  digits = 0,
-  unit = '',
-}) => {
+/** A measured number, or an amber "not measured" badge (a bad-quality value, in HMI terms). */
+export const Value: React.FC<{v: Num | string | undefined; name: string; digits?: number; unit?: string}> = ({v, name, digits = 0, unit = ''}) => {
   if (v === null || v === undefined || v === '') {
-    return <span style={{color: C.placeholder, borderBottom: `2px dotted ${C.placeholder}`}}>[{name}]</span>;
+    return <span style={{background: C.placeholder, color: '#111', padding: '0 8px', fontFamily: monoFont}}>{name}</span>;
   }
   const text = typeof v === 'number' ? v.toLocaleString('en-GB', {maximumFractionDigits: digits, minimumFractionDigits: digits}) : v;
   return (
@@ -50,46 +32,15 @@ export const Value: React.FC<{v: Num | string | undefined; name: string; digits?
   );
 };
 
-export const Badge: React.FC<{text: string; colour?: string; corner?: 'tr' | 'tl' | 'bl' | 'br'}> = ({
-  text,
-  colour = C.text,
-  corner = 'tr',
+/** Real footage if the file is there; an HMI "no signal" camera tile until it is filmed. */
+export const Footage: React.FC<{id: string; label: string; startFrom?: number; speed?: number; volume?: number; style?: React.CSSProperties}> = ({
+  id,
+  label,
+  startFrom = 0,
+  speed = 1,
+  volume = 1,
+  style,
 }) => {
-  const pos: React.CSSProperties = {
-    tr: {top: 40, right: 48},
-    tl: {top: 40, left: 48},
-    bl: {bottom: 40, left: 48},
-    br: {bottom: 40, right: 48},
-  }[corner];
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        ...pos,
-        fontFamily: monoFont,
-        fontSize: 26,
-        color: colour,
-        background: 'rgba(24,24,28,0.82)',
-        border: `1.5px solid ${colour}55`,
-        padding: '8px 16px',
-        borderRadius: 8,
-        letterSpacing: 0.5,
-      }}
-    >
-      {text}
-    </div>
-  );
-};
-
-/** Real footage if the file is there; a labelled box until it is filmed. */
-export const Footage: React.FC<{
-  id: string;
-  label: string;
-  startFrom?: number; // seconds into the clip
-  speed?: number;
-  volume?: number;
-  style?: React.CSSProperties;
-}> = ({id, label, startFrom = 0, speed = 1, volume = 1, style}) => {
   const {fps} = useVideoConfig();
   if (data.footage[id]) {
     return (
@@ -103,42 +54,29 @@ export const Footage: React.FC<{
     );
   }
   return (
-    <AbsoluteFill
-      style={{
-        background: `repeating-linear-gradient(135deg, ${C.panel}, ${C.panel} 24px, #2B2B32 24px, #2B2B32 48px)`,
-        border: `2px dashed ${C.line}`,
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...style,
-      }}
-    >
-      <div style={{fontFamily: monoFont, color: C.dim, fontSize: 30, textAlign: 'center', lineHeight: 1.5}}>
-        {id.toUpperCase()} · footage to film
+    <AbsoluteFill style={{background: '#111', alignItems: 'center', justifyContent: 'center', ...style}}>
+      <div style={{fontFamily: monoFont, color: '#e0e0e0', fontSize: 28, textAlign: 'center', lineHeight: 1.6}}>
+        <span style={{background: C.placeholder, color: '#111', padding: '2px 10px'}}>{id.toUpperCase()} · NO SIGNAL · FOOTAGE TO FILM</span>
         <br />
-        <span style={{fontSize: 24}}>{label}</span>
+        <span style={{fontSize: 22, color: '#a8a8a8'}}>{label}</span>
       </div>
     </AbsoluteFill>
   );
 };
 
 export const Photo: React.FC<{src: string; style?: React.CSSProperties}> = ({src, style}) => (
-  <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover', ...style}} />
+  <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover', display: 'block', ...style}} />
 );
 
 export const Title: React.FC<{children: React.ReactNode; size?: number; colour?: string}> = ({children, size = 54, colour = C.text}) => (
   <div style={{fontFamily: font, fontWeight: 700, fontSize: size, color: colour, lineHeight: 1.15}}>{children}</div>
 );
 
-export const Line: React.FC<{children: React.ReactNode; size?: number; colour?: string; mono?: boolean}> = ({
-  children,
-  size = 34,
-  colour = C.text,
-  mono = false,
-}) => (
-  <div style={{fontFamily: mono ? monoFont : font, fontWeight: 400, fontSize: size, color: colour, lineHeight: 1.35}}>{children}</div>
+export const Line: React.FC<{children: React.ReactNode; size?: number; colour?: string; mono?: boolean}> = ({children, size = 30, colour = C.text, mono = false}) => (
+  <div style={{fontFamily: mono ? monoFont : font, fontSize: size, color: colour, lineHeight: 1.35}}>{children}</div>
 );
 
-/** Word-timed captions for a scene's narration, at most 7 words at a time, split at sentence ends. */
+/** Word-timed captions for a scene's narration, at most 7 words at a time, in a dark HMI bar. */
 export const Captions: React.FC<{vo: string}> = ({vo}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
@@ -158,22 +96,10 @@ export const Captions: React.FC<{vo: string}> = ({vo}) => {
   const chunk = chunks.find((c) => t >= c[0].start - 0.05 && t <= c[c.length - 1].end + 0.25);
   if (!chunk) return null;
   return (
-    <div style={{position: 'absolute', bottom: 64, left: 0, right: 0, display: 'flex', justifyContent: 'center'}}>
-      <div
-        style={{
-          fontFamily: font,
-          fontSize: 38,
-          fontWeight: 600,
-          color: C.text,
-          background: 'rgba(16,16,20,0.78)',
-          padding: '10px 22px',
-          borderRadius: 10,
-          maxWidth: 1500,
-          textAlign: 'center',
-        }}
-      >
+    <div style={{position: 'absolute', bottom: 46, left: 0, right: 0, display: 'flex', justifyContent: 'center'}}>
+      <div style={{fontFamily: font, fontSize: 36, color: '#f0f0f0', background: 'rgba(44,44,44,0.94)', border: '1px solid #6a6a6a', padding: '8px 22px', maxWidth: 1500, textAlign: 'center'}}>
         {chunk.map((w, i) => (
-          <span key={i} style={{opacity: t >= w.start - 0.05 ? 1 : 0.45}}>
+          <span key={i} style={{opacity: t >= w.start - 0.05 ? 1 : 0.5}}>
             {w.text}{' '}
           </span>
         ))}
@@ -182,23 +108,31 @@ export const Captions: React.FC<{vo: string}> = ({vo}) => {
   );
 };
 
-/** Marks a draft render so nobody mistakes it for the final video. */
+/** While anything is missing, a P2 alarm strip under the top bar says what (as on the deck). */
 export const DraftMark: React.FC = () =>
   data.draft.length ? (
     <div
       style={{
         position: 'absolute',
-        top: 14,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        top: 58,
+        left: 0,
+        right: 0,
+        height: 30,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        padding: '0 16px',
+        background: C.placeholder,
+        color: '#111',
         fontFamily: monoFont,
-        fontSize: 18,
-        color: C.placeholder,
-        opacity: 0.85,
+        fontSize: 16,
         whiteSpace: 'nowrap',
+        overflow: 'hidden',
       }}
     >
-      DRAFT · {data.draft.join(' · ')}
+      <b>P2</b>
+      <span>DATA.DRAFT</span>
+      <span>{data.draft.join(' · ')}</span>
     </div>
   ) : null;
 
@@ -217,12 +151,21 @@ export const Typewriter: React.FC<{text: string; delay?: number; seconds?: numbe
 };
 
 export const Box: React.FC<{children: React.ReactNode; colour?: string; style?: React.CSSProperties}> = ({children, colour = C.line, style}) => (
-  <div style={{background: C.panel, border: `2px solid ${colour}`, borderRadius: 12, padding: '14px 20px', ...style}}>{children}</div>
+  <div style={{background: C.panel, border: `1px solid ${colour}`, padding: '12px 18px', ...style}}>{children}</div>
 );
 
-export const Arrow: React.FC<{length?: number; colour?: string}> = ({length = 60, colour = C.dim}) => (
+export const Arrow: React.FC<{length?: number; colour?: string}> = ({length = 60, colour = C.strong}) => (
   <svg width={length} height={24} viewBox={`0 0 ${length} 24`} style={{flexShrink: 0}}>
     <line x1={0} y1={12} x2={length - 12} y2={12} stroke={colour} strokeWidth={3} />
     <polygon points={`${length - 14},4 ${length},12 ${length - 14},20`} fill={colour} />
   </svg>
 );
+
+export const Badge: React.FC<{text: string; colour?: string; corner?: 'tr' | 'tl' | 'bl' | 'br'}> = ({text, corner = 'tr'}) => {
+  const pos: React.CSSProperties = {tr: {top: 110, right: 24}, tl: {top: 110, left: 24}, bl: {bottom: 24, left: 24}, br: {bottom: 24, right: 24}}[corner];
+  return (
+    <div style={{position: 'absolute', ...pos, fontFamily: monoFont, fontSize: 22, color: '#f0f0f0', background: 'rgba(44,44,44,0.92)', border: '1px solid #6a6a6a', padding: '6px 12px'}}>
+      {text}
+    </div>
+  );
+};

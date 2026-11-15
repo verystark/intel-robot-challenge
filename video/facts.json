@@ -1,27 +1,27 @@
 {
   "_comment": "Hand-maintained facts for the video. Change them here, then run scripts/build_data.py. Sources in brackets.",
   "dataset": {
-    "name": "main-clean2",
-    "episodes": 315,
-    "picks": 158,
-    "sorts": 157,
-    "labels_checked": "main-clean3: 242 / 242 sort labels checked",
-    "_source": "Fallback only: scripts/coverage.py counts the sort model's real dataset and build_data.py uses that. main-clean2 = SmolVLA-v2 and v2-long (MODEL_RUN_NOTES.md)"
+    "name": "main-clean4",
+    "episodes": 424,
+    "picks": 182,
+    "sorts": 242,
+    "labels_checked": "main-clean3: 242 / 242 sort labels checked (main-clean4 keeps all of them)",
+    "_source": "Fallback only: scripts/coverage.py counts the sort model's dataset. main-clean4 = Pi0.5-v2-8gpu (cf96b132…), 81,867 frames, 45.5 min"
   },
   "models": {
     "pick": {
-      "name": "SmolVLA-v2-long",
+      "name": "Pi0.5-v2-8gpu",
       "device": "GPU"
     },
     "sort": {
-      "name": "SmolVLA-v2-long",
+      "name": "Pi0.5-v2-8gpu",
       "device": "GPU"
     },
     "anomaly": {
       "name": "PatchCore",
       "device": "GPU"
     },
-    "_source": "loop/cell_config.json during the filmed take. Default: latest:smolvla = SmolVLA-v2-long on the GPU for both stages (14:43, smoother than v2 offline). Rerun scripts/coverage.py after changing"
+    "_source": "The model of tonight's measured arm runs (loop/runs/20261114_222338, _224325; latest:pi05 at the time). Pi0.5-one-8gpu-b (one-clean, imported 23:17) is newer and NOT measured yet: pin --model Pi0.5-v2-8gpu for the take, or re-measure"
   },
   "sentences": {
     "pick": "Pick up the brick.",
@@ -43,11 +43,92 @@
     "_source": "Filled automatically from video/layouts/round_*_eval.json (tools/eval_round.py). Set numbers here only to override them by hand."
   },
   "run_take": {
-    "loop_run": null,
+    "loop_run": "loop/runs/20261114_224325",
     "layout": null,
     "footage_offset_s": 0,
     "result_line": null,
-    "plate_swap_shown": true,
+    "plate_swap_shown": false,
     "_source": "the filmed round: its loop/runs folder, its layout file (video/layouts/round_NN.json), and the footage time where the log's first cycle starts. plate_swap_shown: set false if the mid-run plate swap failed in testing; the run scene then drops that part (VIDEO_PLAN 13.5)"
+  },
+  "policy": {
+    "family": "pi0.5",
+    "training": "8 H100s on Modal, 4 epochs, 5,116 steps, no validation split, image augmentation off",
+    "chunk_ms_gpu": 240,
+    "chunk_ms_source": "median of per-stage inference_ms over 97 pick and sort stages on the arm, same runs"
+  },
+  "inspection": {
+    "crop": "360 px square around the brick, found by colour at the red finger tips",
+    "stops_deg": [
+      90,
+      -90
+    ],
+    "frames_per_stop": 3,
+    "bands": [
+      0.45,
+      0.56
+    ],
+    "train_photos": 641,
+    "train_photos_at_show_pose": 72,
+    "held_out": "28 photos at the two stops (14 clean, 14 defective): scores don't overlap (lowest defective 0.588, highest good 0.491)",
+    "ms_gpu_loop": 34,
+    "ms_gpu_loop_p95": 60,
+    "ms_cpu": 36,
+    "ms_npu": 119,
+    "ms_cpu_npu_note": "short run while the loop was running: re-measure on a quiet laptop",
+    "int8": "31 → 7.9 MB, scores within 0.05 of FP32 (mean 0.016) on the 28 photos",
+    "full_int8": "moved scores by up to 0.28: not used",
+    "train_time": "5 min on the Intel GPU (641 photos, 2% coreset)",
+    "first_live_failure": "first live run rejected a clean brick at 1.0: the heatmap was on the wrist-camera bracket and a loose brick, not the brick (loop/runs/20261114_201611)",
+    "_source": "JUNCTION_SUBMISSION_TEXT_V2.md 'Where each number comes from'; anomaly/README.md",
+    "fp32_mb": 31.0,
+    "int8_mb": 7.9,
+    "int8_diff_max": 0.052,
+    "int8_diff_mean": 0.016,
+    "examples": {
+      "good": {
+        "cycle": 40,
+        "what": "clean red brick"
+      },
+      "defective": {
+        "cycle": 34,
+        "what": "white brick, black marker"
+      }
+    }
+  },
+  "results": {
+    "runs": [
+      "loop/runs/20261114_222338",
+      "loop/runs/20261114_224325 (cycles 1-85)"
+    ],
+    "model": "Pi0.5-v2-8gpu",
+    "bricks_through_loop": 41,
+    "verdicts_correct": 38,
+    "defective_rejected": [
+      13,
+      13
+    ],
+    "clean_accepted": [
+      25,
+      28
+    ],
+    "picks_ok": 41,
+    "pick_attempts": 55,
+    "pick_timeouts": 14,
+    "picks_stopped_by_operator": 6,
+    "median_cycle_s": 20.2,
+    "median_pick_s": 7.6,
+    "median_inspect_s": 3.9,
+    "median_sort_s": 5.7,
+    "thermal": "33-minute run: 52 °C mean, 91 °C peak package temperature (loop/runs/20261114_214941)",
+    "failures": [
+      "PICK.MISS: 14 of 55 pick attempts timed out; the top camera moved about 20 px after recording and pi0.5 was trained without image augmentation",
+      "INSP.FALSE: 3 clean bricks rejected: a long curved brick held by its end (twice) and a tall brick, views the good photos barely contain",
+      "INSP.MARGIN: dark marker on a blue brick scored 0.55 to 0.68, close to the limit; the second look decided",
+      "INSP.FACES: only the two ungripped faces are checked",
+      "GRIP.SENSE: the soft gripper reads the same holding a brick or not; an empty grasp is only caught at inspection"
+    ],
+    "placements_checked": null,
+    "verdicts_checked": "every photo checked by eye",
+    "_source": "JUNCTION_SUBMISSION_TEXT_V2.md; recounted 23:30 (picks 41 done / 14 timeout / 6 stopped up to cycle 85). Recount at the end: the run is still going"
   }
 }

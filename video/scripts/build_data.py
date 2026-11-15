@@ -16,7 +16,7 @@ from pathlib import Path
 VIDEO = Path(__file__).resolve().parents[1]
 REPO = VIDEO.parent
 PUBLIC = VIDEO / "public"
-FOOTAGE_IDS = ["a1", "a2", "a3", "a4", "b1", "b2", "b3"]
+FOOTAGE_IDS = ["a1", "a2", "a3", "a4", "b1", "b2", "b3", "rec_top", "rec_wrist"]  # rec_*: a recorded teleop episode (B-roll)
 
 
 def newest(pattern: str) -> Path | None:
@@ -61,7 +61,7 @@ def pick_ms(rows: list, model_prefix: str, device: str) -> float | None:
 def find_run(explicit: str | None) -> Path | None:
     if explicit:
         return (REPO / explicit).resolve()
-    runs = [r for r in sorted((REPO / "loop" / "runs").glob("*")) if list(r.glob("c*_view*_heat.jpg"))]
+    runs = [r for r in sorted((REPO / "loop" / "runs").glob("*")) if list(r.glob("c*_heat.jpg"))]
     return runs[-1] if runs else None
 
 
@@ -72,6 +72,12 @@ def run_data(run: Path | None) -> dict:
     log = run / "cycles.jsonl"
     if log.exists():
         cycles = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+    for c in cycles:  # newer logs keep one entry per wrist stop; add the flat lists older code reads
+        insp = c.get("inspect")
+        if insp and "stops" in insp and "scores" not in insp:
+            insp["scores"] = [s["median"] for s in insp["stops"]]
+            insp["labels"] = [s["label"] for s in insp["stops"]]
+            insp["stops_deg"] = [s["deg"] for s in insp["stops"]]
     config = json.loads((run / "config.json").read_text()) if (run / "config.json").exists() else {}
     sim = bool(config.get("args", {}).get("sim", True))
     dest = PUBLIC / "inspect"
@@ -79,7 +85,7 @@ def run_data(run: Path | None) -> dict:
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
     images = []
-    for photo in sorted(run.glob("c*_view*.jpg")):
+    for photo in sorted(run.glob("c*_*.jpg")):
         if photo.stem.endswith("_heat"):
             continue
         heat = photo.with_name(photo.stem + "_heat.jpg")
@@ -130,6 +136,32 @@ def evaluation(facts: dict) -> dict:
     return {"evaluation": merged, "trials": trials, "layout": layout}
 
 
+def examples(facts: dict, run: dict) -> list:
+    """The inspection examples chosen in facts.json (by cycle), with their photos and scores per stop."""
+    out = []
+    for kind, ex in (facts.get("inspection", {}).get("examples") or {}).items():
+        cycle = next((c for c in run["cycles"] if c.get("cycle") == ex["cycle"]), None)
+        if not cycle or not cycle.get("inspect"):
+            continue
+        stops = []
+        for s in cycle["inspect"].get("stops", []):
+            stem = f"c{ex['cycle']:03d}_{int(s['deg'])}deg"
+            stops.append({"deg": s["deg"], "median": s["median"], "label": s["label"],
+                          "photo": f"inspect/{stem}.jpg", "heat": f"inspect/{stem}_heat.jpg"})
+        out.append({"kind": kind, "cycle": ex["cycle"], "what": ex.get("what", ""), "verdict": cycle["inspect"]["verdict"],
+                    "second_look": cycle["inspect"].get("second_look", False), "stops": stops})
+    return out
+
+
+def loop_settings() -> dict:
+    """What the loop does at inspection, from loop/cell_config.json (so slides never hard-code it)."""
+    cfg = json.loads((REPO / "loop" / "cell_config.json").read_text())
+    show = cfg.get("show", {})
+    return {"stops_deg": show.get("stops_deg", [0]), "frames_per_stop": show.get("frames_per_stop", 1),
+            "pick_timeout_s": cfg.get("pick", {}).get("timeout_s"), "sort_timeout_s": cfg.get("sort", {}).get("timeout_s"),
+            "fps": cfg.get("fps", 30)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--run", help="loop run folder for the overlays and photos (default: newest with heatmaps)")
@@ -146,18 +178,22 @@ def main() -> None:
     anomaly_gpu = next((r["median_ms"] for r in b["anomaly"]
                         if r["precision"] == "FP32" and r["device"] == facts["models"]["anomaly"]["device"]), None)
 
-    scores = [s for c in run["cycles"] for s in c.get("inspect", {}).get("scores", [])]
+    scores = [s for c in run["cycles"][:1] for s in c.get("inspect", {}).get("scores", [])]
     cycle_s = [c["total_s"] for c in run["cycles"] if c.get("total_s")]
     e = evaluation(facts)
     ev = e["evaluation"]
     draft_reasons = []
     if run["sim"]:
         draft_reasons.append("run overlays come from a simulation run")
-    if ev["cycles"] is None:
+    results = facts.get("results") or {}
+    if ev["cycles"] is None and not results.get("bricks_through_loop"):
         draft_reasons.append("no evaluation yet")
     if not footage["a1"]:
         draft_reasons.append("no footage of the run yet")
-    if b["contended"]:
+    inspection = facts.get("inspection") or {}
+    if inspection.get("ms_cpu_npu_note"):
+        draft_reasons.append("inspection CPU / NPU latency measured while the loop ran")
+    elif b["contended"]:
         draft_reasons.append("benchmarks measured on a busy laptop")
 
     # Episode counts come from the sort model's own dataset (scripts/coverage.py); facts.json is the fallback.
@@ -169,7 +205,12 @@ def main() -> None:
     # INT8 size and score difference of the current inspection model (scripts/int8_check.py).
     int8_path = PUBLIC / "int8.json"
     model_bin = REPO / "anomaly/exported_model/weights/openvino/model.bin"
-    if int8_path.exists():
+    if inspection.get("int8_mb"):  # measured on the current brick-square model (facts.json)
+        for r in b["anomaly"]:
+            r["size_mb"] = inspection["int8_mb"] if r["precision"].startswith("INT8") else inspection["fp32_mb"]
+            if r["precision"].startswith("INT8"):
+                r["score_diff_max"] = inspection["int8_diff_max"]
+    elif int8_path.exists():
         int8 = json.loads(int8_path.read_text())
         for r in b["anomaly"]:
             r["size_mb"] = int8["int8_mb"] if r["precision"].startswith("INT8") else int8["fp32_mb"]
@@ -188,12 +229,31 @@ def main() -> None:
             "INSPECT_MS": anomaly_gpu,
             "R": ev["rounds"], "M": ev["cycles"], "P": ev["pick_first_try"],
             "I": ev["verdict_correct"], "S": ev.get("placed_as_told"), "E": ev["correct_plate"],
-            "X": ev["median_cycle_s"] or (round(statistics.median(cycle_s), 1) if cycle_s and not run["sim"] else None),
+            "X": ev["median_cycle_s"] or results.get("median_cycle_s") or (round(statistics.median(cycle_s), 1) if cycle_s and not run["sim"] else None),
+            # Measured on the arm (facts.json "results"); the narration and the results scene use these.
+            "BRICKS": results.get("bricks_through_loop"),
+            "VERDICTS_OK": results.get("verdicts_correct"),
+            "DEF_REJ": (results.get("defective_rejected") or [None, None])[0],
+            "DEF_TOTAL": (results.get("defective_rejected") or [None, None])[1],
+            "CLEAN_OK": (results.get("clean_accepted") or [None, None])[0],
+            "CLEAN_TOTAL": (results.get("clean_accepted") or [None, None])[1],
+            "FALSE_REJ": (lambda c: c[1] - c[0] if None not in c else None)(results.get("clean_accepted") or [None, None]),
+            "PICKS_OK": results.get("picks_ok"),
+            "PICK_ATTEMPTS": results.get("pick_attempts"),
+            "CYCLE_S": results.get("median_cycle_s"),
+            "PICK_S": results.get("median_pick_s"),
+            "INSPECT_S": results.get("median_inspect_s"),
+            "SORT_S": results.get("median_sort_s"),
+            "VLA_MS": (facts.get("policy") or {}).get("chunk_ms_gpu"),
+            "INSPECT_MS_LOOP": inspection.get("ms_gpu_loop"),
+            "INSPECT_MS_CPU": inspection.get("ms_cpu"),
+            "INSPECT_MS_NPU": inspection.get("ms_npu"),
         },
         "bench": b,
-        "run": {**run, "scores": scores},
+        "run": {**run, "scores": scores, "examples": examples(facts, run)},
         "footage": footage,
         "evaluation": ev,
+        "loop": loop_settings(),
         "trials": e["trials"],
         "layout": e["layout"],
         "draft": draft_reasons,
