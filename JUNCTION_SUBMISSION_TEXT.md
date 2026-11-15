@@ -1,5 +1,8 @@
 # Junction submission: the text
 
+> **Superseded by [JUNCTION_SUBMISSION_TEXT_V2.md](JUNCTION_SUBMISSION_TEXT_V2.md)** (pi0.5, measured on the arm).
+> Paste from V2. This file's strategy (section 1) and checklists still apply.
+
 Every field of the Junction form, filled out and ready to paste, with the strategy behind it.
 The form itself is in [JUNCTION_SUBMISSION_FORM.md](JUNCTION_SUBMISSION_FORM.md); the wider
 submission plan (repo cleanup, video, deck) is in [SUBMISSION.md](SUBMISSION.md).
@@ -140,7 +143,7 @@ An SO-101 arm picks, inspects and sorts Duplo bricks with no positions in its co
 ### One cycle
 
 1. **Pick (learned).** SmolVLA gets the top and wrist cameras, the joint positions and the sentence "Pick up the brick." It picks one of the bricks on the table, wherever it lies.
-2. **Inspect (scripted).** The arm holds the brick at one fixed pose in front of a webcam and turns it to 0°, 90° and 180°. Anomalib PatchCore scores each view (median of 3 frames) and draws a heatmap. A defective view rejects the brick; an unsure view gets a second look, and a brick that stays unsure is rejected.
+2. **Inspect (scripted).** The arm holds the brick at one fixed pose in front of a webcam and turns it to 90° and −90°, the two faces no gripper finger covers. Anomalib PatchCore scores each view (median of 3 frames) and draws a heatmap. A defective view rejects the brick; an unsure view gets a second look, and a brick that stays unsure is rejected.
 3. **Sort (learned).** The verdict becomes the task sentence: "The brick is good. Put it on the green plate." or "The brick is defective. Put it on the orange plate." The same SmolVLA finds the plate of that colour, wherever it stands.
 4. Repeat until the table is empty. Nobody chooses anything during a run.
 
@@ -188,7 +191,7 @@ Physical AI Studio (recording, training on Modal, OpenVINO export), SmolVLA, ACT
 Video: [PLACEHOLDER: video URL] · Unedited take: [PLACEHOLDER: unedited take URL] · Code: [PLACEHOLDER: repo URL] · Live: [PLACEHOLDER: table from the dashboard's Tables page]
 ````
 
-**4825 of 5000 characters** with the placeholders as written; about 4246 once they hold short numbers, so there is room for the failure lines and links. Notes on the choices:
+**4861 of 5000 characters** with the placeholders as written; about 4246 once they hold short numbers, so there is room for the failure lines and links. Notes on the choices:
 - The claim is in the first 3 lines; a skimmer can stop there.
 - Lists instead of tables, so it reads well even if the form's markdown is limited.
 - Every number is from the repo (section 4 lists the source of each); unmeasured ones are placeholders.

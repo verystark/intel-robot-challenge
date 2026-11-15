@@ -98,7 +98,7 @@ index 203e8ba3..45e4e8cf 100644
              return f"batch:{payload.remote_trainer_id}:{payload.policy}"
          return f"{trainer_key}:{payload.device.type}:{payload.device.index}" if payload.device else trainer_key
 diff --git a/application/backend/src/trainer/modal_app.py b/application/backend/src/trainer/modal_app.py
-index 5dbda125..a73be0fa 100644
+index 5dbda125..7f134dde 100644
 --- a/application/backend/src/trainer/modal_app.py
 +++ b/application/backend/src/trainer/modal_app.py
 @@ -17,6 +17,13 @@ image = modal.Image.from_registry(
@@ -115,7 +115,7 @@ index 5dbda125..a73be0fa 100644
  )
  secret_name = os.environ.get("PHYSICALAI_MODAL_SECRET")
  
-@@ -39,22 +46,73 @@ def train(job_id: str) -> int:
+@@ -39,22 +46,78 @@ def train(job_id: str) -> int:
      from trainer.batch.status import BatchJobStatus
      from trainer.settings import get_settings
  
@@ -135,6 +135,11 @@ index 5dbda125..a73be0fa 100644
 +    os.environ["PHYSICALAI_FULL_CHECKPOINT_DIR"] = str(root / "full-checkpoint")
 +    # Modal re-runs a preempted job from the start. If this job had already finished training (its
 +    # full checkpoint is on the Volume), only export it (training/job.py, _export_completed_checkpoint).
++    # A preemption during training: training/job.py saves a full checkpoint here every 1,500 steps
++    # and a re-run of the same job continues from it (PHYSICALAI_RESUME_DIR).
++    os.environ["PHYSICALAI_RESUME_DIR"] = str(root / "resume")
++    if (root / "resume" / "last.ckpt").is_file():
++        print(f"Restart during training: resuming from {root / 'resume' / 'last.ckpt'}", flush=True)
 +    completed = root / "full-checkpoint" / "model.ckpt"
 +    if completed.is_file():
 +        os.environ["PHYSICALAI_COMPLETED_CHECKPOINT"] = str(completed)
@@ -264,7 +269,7 @@ index 8fff9ec0..f69d42f3 100644
 +        return [device_index]
 +    return requested_gpu_count()
 diff --git a/application/backend/src/training/job.py b/application/backend/src/training/job.py
-index f616405e..6ff60609 100644
+index f616405e..771b291c 100644
 --- a/application/backend/src/training/job.py
 +++ b/application/backend/src/training/job.py
 @@ -325,6 +325,31 @@ def _hf_token_env(token: SecretStr | None):
@@ -355,7 +360,7 @@ index f616405e..6ff60609 100644
              # Applied to the train split only; the datamodule leaves validation
              # images untouched so eval loss stays comparable across runs.
              image_transforms=DefaultImageAugmentations() if spec.augment_images else None,
-@@ -407,7 +461,15 @@ def run_training_job(
+@@ -407,7 +461,20 @@ def run_training_job(
              monitor="val/loss",
              mode="min",
          )
@@ -369,10 +374,30 @@ index f616405e..6ff60609 100644
 +            # With forked ranks only the weights come back to this process, not the step count, so
 +            # rank 0 saves the final checkpoint itself (what _ensure_checkpoint_exists would save).
 +            callbacks.append(_final_checkpoint_callback(cache_dir / CHECKPOINT_NAME))
++        resume_dir = os.environ.get(RESUME_DIR_ENV)
++        if resume_dir and spec.snapflow_start_epoch is None:  # SnapFlow has its own two-phase checkpoints
++            # Modal can preempt a GPU container at any time and then re-runs the job from the start;
++            # with a periodic checkpoint on the Volume the re-run continues instead of starting over.
++            callbacks.append(_resume_checkpoint_callback(Path(resume_dir), _resume_every_steps()))
          snapflow_callback = _build_snapflow_callback(spec)
          if snapflow_callback is not None:
              callbacks.append(snapflow_callback)
-@@ -431,6 +493,13 @@ def run_training_job(
+@@ -424,13 +491,26 @@ def run_training_job(
+             check_val_every_n_epoch=1,
+         )
+ 
+-        report(0, "Training model", {})
+-        trainer.fit(model=policy, datamodule=datamodule)
++        resume_from = _resume_checkpoint(resume_dir) if resume_dir else None
++        if resume_from is not None:
++            logger.info("Resuming training from %s (the job was restarted)", resume_from)
++        report(0, "Resuming training" if resume_from is not None else "Training model", {})
++        if resume_from is not None:
++            trainer.fit(model=policy, datamodule=datamodule, ckpt_path=str(resume_from))
++        else:
++            trainer.fit(model=policy, datamodule=datamodule)
+         if should_stop():
+             logger.info("Training canceled; skipping checkpoint and export")
              return
  
          _finalize_checkpoints(trainer, cache_dir, snapflow_callback=snapflow_callback)
@@ -386,10 +411,63 @@ index f616405e..6ff60609 100644
          _publish(cache_dir, output_dir)
  
          _detach_trainer(policy, trainer)
-@@ -485,6 +554,76 @@ def _load_policy_from_checkpoint(spec: TrainingJobSpec, checkpoint: Path) -> Pol
+@@ -485,6 +565,129 @@ def _load_policy_from_checkpoint(spec: TrainingJobSpec, checkpoint: Path) -> Pol
      return policy
  
  
++RESUME_DIR_ENV = "PHYSICALAI_RESUME_DIR"
++"""Folder for a periodic full checkpoint that a restarted job resumes from (set on Modal)."""
++
++RESUME_EVERY_ENV = "PHYSICALAI_RESUME_EVERY_STEPS"
++_RESUME_EVERY_DEFAULT = 1500
++_RESUME_NAME = "last.ckpt"
++
++
++def _resume_every_steps() -> int:
++    try:
++        return max(1, int(os.environ.get(RESUME_EVERY_ENV, _RESUME_EVERY_DEFAULT)))
++    except ValueError:
++        return _RESUME_EVERY_DEFAULT
++
++
++def _resume_checkpoint(resume_dir: str | Path) -> Path | None:
++    """The periodic checkpoint to resume from, if a previous attempt of this job left one."""
++    checkpoint = Path(resume_dir) / _RESUME_NAME
++    return checkpoint if checkpoint.is_file() else None
++
++
++def _resume_checkpoint_callback(resume_dir: Path, every: int) -> Any:
++    """Callback that saves a full checkpoint (with optimizer state) to ``resume_dir`` every ``every`` steps.
++
++    Junction 2026 station addition. Every rank calls ``save_checkpoint`` at the same step (it is
++    collective; rank 0 writes). The file is written under a temporary name and renamed afterwards,
++    so a preemption in the middle of writing never leaves a broken ``last.ckpt``.
++    """
++    import time
++
++    from lightning.pytorch.callbacks import Callback
++
++    class SaveResumeCheckpoint(Callback):
++        def __init__(self) -> None:
++            self.saved_step = -1
++
++        def on_train_batch_end(self, trainer: Any, pl_module: Any, *args: Any) -> None:
++            step = trainer.global_step
++            if step <= 0 or step % every != 0 or step == self.saved_step:
++                return
++            self.saved_step = step
++            started = time.monotonic()
++            partial = resume_dir / f"{_RESUME_NAME}.tmp"
++            if trainer.is_global_zero:
++                resume_dir.mkdir(parents=True, exist_ok=True)
++            trainer.save_checkpoint(partial)
++            if trainer.is_global_zero:
++                partial.replace(resume_dir / _RESUME_NAME)
++                logger.info("Saved resume checkpoint at step %d in %.0f s", step, time.monotonic() - started)
++
++    return SaveResumeCheckpoint()
++
++
 +COMPLETED_CHECKPOINT_ENV = "PHYSICALAI_COMPLETED_CHECKPOINT"
 +"""Full checkpoint of a run that already finished training (set on Modal when a job restarts)."""
 +

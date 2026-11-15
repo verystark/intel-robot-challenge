@@ -205,3 +205,28 @@ git -C ~/intel-robot-challenge/physical-ai-studio checkout -- application/backen
 ```
 
 Then redeploy the Modal app (section 4b) and restart the backend (4a).
+
+## 9. Resume after a preemption (2026-11-14, 21:50)
+
+**Why:** at 20:05 Modal interrupted both running containers at once (`Pi0.5-one-8gpu` at step
+2,925 of 5,070, and the team's `Pi0.5` at 84%). Modal can preempt GPU containers at any time; it
+can't be turned off for GPU functions, and Modal then re-runs the same job **from the start**.
+With validation split 0 nothing was saved until the end, so all progress was lost.
+
+**Fix** (`training/job.py`, `trainer/modal_app.py`; deployed 21:50):
+- Every 1,500 steps the job saves a full checkpoint (with optimizer and learning-rate schedule)
+  to the Modal Volume: `jobs/<job_id>/resume/last.ckpt`. It is written under a temporary name and
+  renamed, so an interruption mid-write never leaves a broken file. Change the interval with the
+  environment variable `PHYSICALAI_RESUME_EVERY_STEPS`.
+- When Modal re-runs the job, it finds that file and continues from it (`trainer.fit(ckpt_path=…)`):
+  same step count, optimizer state and schedule. Only the steps since the last save are redone.
+- Not for SnapFlow runs (they have their own two-phase checkpoints).
+- Cost: a pi0.5 full checkpoint is about 30 GB; how long each save takes shows in the Modal log
+  ("Saved resume checkpoint at step … in … s").
+
+**Checked:** local 2-process `torchrun` test on CPU: run 1 saved at step 4 and was killed at step
+7; run 2 resumed at step 5 and finished at step 10 with the optimizer and scheduler restored.
+Studio's tests: 271 passed.
+
+**Limit:** if the restart waits a long time for 8 free GPUs (Modal capacity), it still waits; it
+just doesn't lose the work when it does start.

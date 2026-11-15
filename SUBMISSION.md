@@ -2,8 +2,8 @@
 
 What Junction's form asks for, what we put in each field, and how we make the video.
 
-> **The paste-ready text for every field is in [JUNCTION_SUBMISSION_TEXT.md](JUNCTION_SUBMISSION_TEXT.md).**
-> Sections 2 and 3 below are the earlier drafts; where they differ, that file wins. The form as
+> **The paste-ready text for every field is in [JUNCTION_SUBMISSION_TEXT_V2.md](JUNCTION_SUBMISSION_TEXT_V2.md)** (pi0.5,
+> measured on the arm). Sections 2 and 3 below are earlier drafts; where they differ, V2 wins. The form as
 pasted is in [JUNCTION_SUBMISSION_FORM.md](JUNCTION_SUBMISSION_FORM.md). The demo plan is in
 [PLAN_AND_SHOW.md](PLAN_AND_SHOW.md).
 
@@ -239,40 +239,48 @@ See [VIDEO_PLAN.md](VIDEO_PLAN.md) §10.
 
 ## 6. Presentation (PDF, ≤20 MB)
 
-Nine 16:9 slides. Technical, plain wording (the rules in [VIDEO_PLAN.md](VIDEO_PLAN.md) §2 and
-§13.1): what we built, how, and the measured numbers with failures counted. The deck tells the
-same story as the video, so a judge who reads only the PDF gets the full picture.
+Nine 16:9 pages, built on tonight's measured arm runs with pi0.5 (`Pi0.5-v2-8gpu`). Technical,
+plain wording (the rules in [VIDEO_PLAN.md](VIDEO_PLAN.md) §2 and §13.1), failures counted.
+Updated 2026-11-15 about 00:30 laptop time.
 
 ### How it's built
 
-In the video's Remotion project (`video/src/deck/`), one still per slide, combined into
-`video/out/jenssenit_deck.pdf`. Commands in [video/README.md](video/README.md).
+In the video's Remotion project (`video/src/deck/`), one still per page, combined into
+`video/out/jenssenit_deck.pdf` (`cd video && npm run deck`). Commands in
+[video/README.md](video/README.md).
 
-- **Why Remotion and not the Slides artifact type:** the deck uses the video's components and
-  reads the same `video/public/data.json`. When the evaluation rounds or new benchmarks come in,
-  one command rebuilds both the deck and the video with the new numbers; nothing is typed in by
-  hand. It works offline, and nothing leaves the laptop. (A Slides artifact would mean
-  publishing to claude.ai and editing numbers by hand.)
-- Unmeasured numbers show as yellow `[NAME]` placeholders, and a footer line says what's still a
-  draft, the same as in the video.
+- **Data:** every number comes from `video/public/data.json`, which passes `video/facts.json`
+  through: `results` (tonight's runs), `inspection`, `policy`, `models`, plus
+  `public/coverage.json` and the run's photos in `public/inspect/`. Change a fact there and
+  re-render; nothing is typed into the slides.
+- **Look: screens of our own operator HMI** (`loop/dashboard`, after ISA-101), not a slide
+  template. Each page is a "screen" of CELL 01: the same grey, faceplates with title bars,
+  uppercase tags, monospace values, the process mimic, alarm and event tables, a trend display.
+  Colours come from `loop/dashboard/palette.json`; colour only means plate identity or an
+  abnormal state. Pages are tabs F1–F9. Code: `video/src/deck/hmi.tsx` (building blocks),
+  `video/src/deck/Deck.tsx` (pages).
+- **What's still open shows as an alarm:** a P2 `DATA.DRAFT` banner on every page lists it
+  (now: landing plate not counted, PatchCore CPU / NPU times measured while the loop ran, team
+  names), and missing values are amber badges.
 
-### The slides
+### The pages
 
-| # | Title | The one point | On the slide | Source |
+| # | Page | The one point | On it | Source |
 |---|---|---|---|---|
-| 1 | Jenssenit | A VLA picks and sorts randomly placed bricks onto movable plates, with Anomalib inspection in the loop, all on one laptop | One-sentence claim, the four facts (variable brick count, random positions, movable plates, no coordinates in code), a frame of the cell (the coverage map until footage exists), team | `facts.json`, footage `a1` |
-| 2 | The task | Nothing is in a fixed place; a replayed motion would fail | Spec table: bricks, positions, plates, coordinates in code, defect check. The three exact task sentences. A round's random draw (map) | `cell_config.json` sentences, `video/layouts/` |
-| 3 | The cell | Learned where it varies, scripted where it must be identical | Pipeline PICK → SHOW → INSPECT → SORT, each marked learned or scripted, with its model and device. The verdict becoming the next task sentence | `cell_config.json`, CLAUDE.md |
-| 4 | The policy and its data | SmolVLA, fine-tuned in Physical AI Studio on teleoperation, covers the table | Inputs → SmolVLA → 50-action chunk. Dataset numbers. The coverage map: 241 grasps, 242 releases, both plates on both sides in all three recording batches | `DATASET_MAIN_CLEAN3.md`, `video/public/coverage.json` |
-| 5 | Data and training checks | Raw data kept, every label checked, and a training trap found and fixed | Raw `main` (501) never edited → cleaned copies (486). 242 / 242 sort labels and 244 / 244 picks checked. The validation-split trap (epoch-3 snapshot shipped). v1 vs v2 offline numbers | `DATASET_MAIN_CLEAN3.md`, `MODEL_RUN_NOTES.md` |
-| 6 | Inspection | Anomaly detection needs an identical view, so the pose is scripted | Why: the first photo set (arm pose different in every photo) rejected 3 of 15 good bricks. Now: fixed pose, 0° / 90° / 180°, median of 3 frames, bands, second look. Heatmaps. Trained on good bricks only, on the Intel GPU (2.7 vs 12–17 min). INT8 weight-only | `ANOMALY_DATA_REVIEW.md`, `CLAUDE.md`, `loop/runs/` |
-| 7 | On the laptop | Every model in OpenVINO, each on the device measured best for it | Latency table: model × CPU / GPU / NPU. Why each device. Async chunking headroom. INT8 size and score change. Temperature | `bench/results/` via `data.json`, `bench/RESULTS.md` |
-| 8 | Results | Measured over random rounds, failures counted | Evaluation table: rounds, cycles, pick first try, verdict correct, placed as told, end to end, median cycle. Test positions ✓ / ✗ on the coverage map. Failures, one line each | `video/layouts/round_*_eval.json` |
-| 9 | Limits and next steps | Where it's weak, and what we'd do next | Offline: unseen picks 8 / 13 (SmolVLA-v2), 6 / 13 (ACT). No grasp signal from the gripper. Laptop at 90–97 °C under load. Next: more data, empty-grasp re-pick from the inspection photo, more defect types | `MODEL_RUN_NOTES.md`, `WORK_LOG.md` |
+| 1 | SYSTEM | A pi0.5 VLA picks and sorts randomly placed bricks onto movable plates, Anomalib checks every brick, all on one laptop | System description, key facts incl. 38 / 41 verdicts and 13 / 13 defects rejected, workspace coverage | `facts.json`, `coverage.json` |
+| 2 | TASK | Nothing is in a fixed place, including the target surface | Spec table (bricks, target surface movable and named by colour, no coordinates in code), the three exact sentences, where the plates stood in training: green 84 left / 45 right, orange 51 / 62 | `coverage.json` (main-clean4) |
+| 3 | PROCESS | Learned where the scene varies, scripted where it must not | Plant mimic: pick area → SO-101 arm (pi0.5, 240 ms chunk) → inspection station (brick square, ±90°, bands 0.45 / 0.56) → verdict → movable plates. Sequence with medians on the arm (7.6 / 3.9 / 5.7 s), interlocks | `facts.json`, `cell_config.json` |
+| 4 | POLICY | pi0.5 fine-tuned in Physical AI Studio on 424 teleoperated episodes | Inputs → pi0.5 → 50 × 6 actions. Training: 8 × H100, 4 epochs, 5,116 steps, val split 0, augmentation off. Coverage map | `facts.json` `policy`, MODEL_RUN_NOTES.md |
+| 5 | DATA | Raw data kept, labels checked, findings fixed | Pipeline (501 raw → 486 → main-clean4 424; new one-clean 298, labelled not measured). Findings as events (checkpoint trap, pick endings, top camera moved). Model history table, every model to tonight's | DATASET_MAIN_CLEAN3.md, MODEL_RUN_NOTES.md, Studio DB |
+| 6 | INSPECTION | Only the brick is scored | Inspection faceplate with two real bricks from run `224325` (C69 clean 0.006 / 0.000, C34 marker 0.963), gauge with bands, settings (crop, stops, held-out separation 0.491 vs 0.588, 641 photos, INT8). Before / after heatmaps: the first live failure (whole crop, 1.0) vs the brick square | `facts.json` `inspection`, `loop/runs/20261114_201611`, `_224325` |
+| 7 | COMPUTE | Each model where it runs, measured | Tonight on the arm: pi0.5 240 ms GPU, PatchCore 34 ms GPU (CPU 36 / NPU 119, measured while the loop ran). Earlier models' benchmark (SmolVLA-v2, ACT), labelled. Log-scale bars. Chunk timing: 833 ms budget, 593 ms to spare | `facts.json`, `bench/results/` |
+| 8 | RESULTS | Measured on the arm, failures counted | Production faceplate: 41 bricks, 38 / 41 verdicts, 13 / 13 defects rejected, 25 / 28 clean accepted, 41 / 55 picks (+6 stopped), 20.2 s per brick. Failures as events. Trend of worst stop score per brick against the bands | `facts.json` `results`, run `224325` cycles |
+| 9 | LIMITS | Where it's weak, and the work orders | Alarms from the failures (pick misses: top camera moved, no augmentation; 3 false rejects; blue marker near the limit; two faces only; no grasp signal; 91 °C peak). Work orders: realign camera + augment, more photos of long / tall bricks, test Pi0.5-one-8gpu-b, log landings, empty-grasp re-pick | `facts.json` `results` |
 
 ### Before uploading
 
 - [ ] `python3 video/scripts/build_data.py`, then `npm run deck` in `video/`.
-- [ ] No yellow placeholders left; the footer has no draft line.
-- [ ] Slides 3 and 7 name the models and devices actually used in the video and the demo.
-- [ ] The PDF is under 20 MB.
+- [ ] If more cycles are counted, update `video/facts.json` `results` first.
+- [ ] Team names in `video/facts.json`; the banner then lists only real gaps.
+- [ ] Pages 3, 4 and 7 name the model actually used in the video and the demo.
+- [ ] The PDF is under 20 MB (now 3.2 MB).
