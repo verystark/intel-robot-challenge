@@ -91,6 +91,13 @@ Kickoff rules override this guide. If they say something different, update this 
       test-turn / collect), tested in simulation; the hardware checklist is in [loop/README.md](loop/README.md).
 - [x] Benchmarks (`bench/`) and the evidence table `bench/RESULTS.md`; the demo-day guide [DEMO_DAY.md](DEMO_DAY.md).
 - [x] Anomalib trains on the Intel GPU, INT8 copy, score bands for the loop (`anomaly/README.md`).
+- [x] Submission video built from code in `video/` (Remotion): scenes, AI narration with captions, coverage map
+      of the training data, draft render `video/out/jenssenit_draft.mp4`, thumbnail. Waiting for footage and the
+      evaluation rounds ([VIDEO_PLAN.md](VIDEO_PLAN.md), [video/README.md](video/README.md)).
+- [x] Evaluation tools: `tools/random_layout.py` (random brick and plate positions) and `tools/eval_round.py`
+      (records each cycle) ([VIDEO_PLAN.md](VIDEO_PLAN.md) §3).
+- [x] Slide deck from the same data: `cd video && npm run deck` → `video/out/jenssenit_deck.pdf` (plan in
+      [SUBMISSION.md](SUBMISSION.md) §6). Paste-ready form text: [JUNCTION_SUBMISSION_TEXT.md](JUNCTION_SUBMISSION_TEXT.md).
 
 **Blocking: do these first**
 

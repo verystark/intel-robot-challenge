@@ -151,3 +151,61 @@ about 9× faster, so it can re-plan much more often.
 **Running it:** Studio → inference → `ACT-pick-v1`, OpenVINO, GPU, Asynchronous. Because each
 inference takes only ~18 ms, set "Request the next chunk at" to about 70–80% (re-plans every
 0.7–1 s instead of every 1.7 s at 50%).
+
+## SmolVLA-v2-long (2026-11-14, ready 14:43)
+
+- Studio model `SmolVLA-v2-long` (id `bf872bab-…`), OpenVINO. Same data and settings as v2
+  (`main-clean2`, batch 32, validation split 0), 11 epochs = 20,757 steps. Final checkpoint
+  confirmed (epoch 11, `global_step` 20,757).
+- Offline test run on the CPU (the arm was using the GPU), so small numeric differences from v2's
+  GPU numbers are possible.
+
+| | v2 | v2-long |
+|---|---|---|
+| Jerkiness, Asynchronous, default settings (shoulder_lift / elbow; same episodes) | 8.5 / 7.6 | **6.1 / 5.0** |
+| Error vs teleop in that playback (shoulder_lift / elbow) | 12.8 / 9.4 | 11.5 / 8.2 |
+| Unseen picks: heads the same way as teleop | 8/13 | 8/14 |
+| Unseen sorts: right sentence closer to teleop than wrong one | 15/20 | 14/20 |
+| Unseen sorts: pans the same way as teleop | 13/19 | 12/20 |
+
+The unseen-episode rows used slightly different episodes for the two models (another session
+deleted 2 episodes from `main-clean3` in between, which shifted the indices), so treat them as
+"about the same", not as a ranking.
+
+v2-long is about 25–35% smoother than v2 and slightly closer to the teleop, and just as weak on
+new layouts, as expected from training longer on the same data. Use layouts that appear in the
+recordings.
+
+## Model downloads from Modal (2026-11-14)
+
+From the next Modal run on, the full checkpoint (with optimizer state) stays on the Modal Volume and
+the laptop gets a weights-only `model.ckpt` plus the export: about 13–14 GB for pi0.5 instead of
+34 GB. Models download to the SSD, not `/tmp`. Details, and how to fetch a full checkpoint:
+`GPU_SCALING.md` section 8.
+
+## Pi0.5-v2-8gpu (2026-11-14, laptop time)
+
+- pi0.5 on `main-clean4` (424 episodes), 8×H100 on Modal via torchrun, batch 8 per GPU (64 total),
+  4 epochs = 5,116 steps, validation split 0. Studio job `29fe2a9d-6160-4b48-8439-87f645abe23b`.
+- **Imported into Studio at about 18:15 as `Pi0.5-v2-8gpu`** (model id `4822d9e2-36d4-49ff-96be-2f6796ee002f`, dataset
+  `main-clean4`, OpenVINO): weights-only `model.ckpt` (9.36 GB, all 823 tensors identical to the full
+  checkpoint, step 5,116) plus the export. Loads on the laptop GPU in about 26 s, about 300 ms per
+  chunk. The training job itself shows "canceled". What happened:
+  1. 15:24–16:06 trained fine (loss about 0.35 → 0.03), then Modal **preempted** the container
+     during the export (16:10, "Container terminated due to preemption"). That run's weights were
+     only on the container's disk and were lost.
+  2. Modal re-ran the job by itself (16:10–17:05, same result). Its checkpoint was copied to the
+     Modal Volume by hand at 17:07.
+  3. The export finished about 17:20, but the 7 other GPU processes never exited, so the job hung
+     with 8 GPUs billing. The export was copied to the Volume and the job was cancelled at 17:31.
+- **Where the model is:**
+  - Modal Volume `physicalai-training-bbbcdfa03cd74755b4c1c81cde8483db`,
+    `jobs/29fe2a9d-6160-4b48-8439-87f645abe23b/`: `full-checkpoint/model.ckpt` (29.9 GB, with
+    optimizer state) and `salvage/exports/openvino/` (6.3 GB, the model to run).
+  - Laptop copy (complete, checked identical to the Volume copy, 18:12): `/home/intel/pi05-models/Pi0.5-v2-8gpu/` (`salvage/exports/openvino/`
+    and `full-checkpoint/model.ckpt`).
+- **Run it** in Studio (Inference → `Pi0.5-v2-8gpu`, OpenVINO, GPU, Execution → Asynchronous), or with the
+  loop, which also accepts an export folder:
+  `$PY loop/run_cell.py --model /home/intel/pi05-models/Pi0.5-v2-8gpu/salvage/exports/openvino`
+- **Before the next multi-GPU run, fix the hang:** the GPU processes other than rank 0 must shut down
+  their process group and exit right after training (see GPU_SCALING.md).

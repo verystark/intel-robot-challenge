@@ -30,9 +30,10 @@ All in `physical-ai-studio/application/backend/` (git submodule, **uncommitted**
 | `src/services/training_targets/remote.py` | Modal jobs are queued per model name, not per policy: different names run side by side | backend restart |
 | `src/schemas/remote_trainer.py` | New GPU options: `H100:2`, `H100:4`, `A100-80GB:2`, `A100-80GB:4` | backend restart |
 | `src/services/training_backends/modal.py` | For N GPUs: asks Modal for N GPUs, 8N CPU cores, 32N GB memory, and sets `PHYSICALAI_NUM_GPUS=N` | backend restart |
-| `src/training/device.py` | `PHYSICALAI_NUM_GPUS > 1` on CUDA: train on N GPUs with fork-based DDP | Modal redeploy |
-| `src/training/job.py` | Multi-GPU only: progress reported from rank 0 only, rank 0 saves the final checkpoint (real step count), same data split on every rank, batch-size finder refused | Modal redeploy |
-| `src/trainer/modal_app.py` | Ships our `training/` folder into the Modal image; only the parent process commits the Volume, plus a 5 s commit loop for multi-GPU jobs | Modal redeploy |
+| `src/training/device.py` | `PHYSICALAI_NUM_GPUS > 1` on CUDA: N devices, Lightning DDP (it sees torchrun started the processes and launches none) | Modal redeploy |
+| `src/training/multi_gpu.py` (new) | Multi-GPU jobs train in fresh processes started with `torchrun`, one per GPU; rank 0 writes progress lines that the Modal function forwards to Studio | Modal redeploy |
+| `src/training/job.py` | Multi-GPU only: hands the job to `torchrun`; progress from rank 0 only; rank 0 saves the final checkpoint and alone publishes and exports; same data split on every rank; batch-size finder refused | Modal redeploy |
+| `src/trainer/modal_app.py` | Ships our `training/` folder into the Modal image; only the Modal function itself commits the Volume, plus a 5 s commit loop for multi-GPU jobs | Modal redeploy |
 | `tests/...` | Updated key test, new multi-GPU test | |
 
 Single-GPU jobs behave exactly as before: none of the multi-GPU code runs unless
@@ -45,13 +46,20 @@ these edits. Check `git -C physical-ai-studio status` first.
 
 - Studio's own tests for the touched code: **318 passed** (run from a throwaway environment, so
   Studio's `.venv` wasn't touched; `uv sync` there would undo the arm driver edits).
-- Local 2-process fork test on CPU with the same Lightning (2.6.6) as the Modal image:
-  - progress reports come only from rank 0;
-  - the parent process carries on after training and gets the trained weights;
-  - rank 0's final checkpoint has the real step count (6 of 6). Without that fix the parent's
-    checkpoint said step 0, which would hide the "early checkpoint" check;
-  - the weights are the trained ones.
-- **Not tested yet:** a real multi-GPU run on Modal (section 5).
+- First design (fork-based, replaced, see next points): a local 2-process fork test on CPU passed,
+  and showed that a forked parent's own checkpoint says step 0. That's why rank 0 saves the final
+  checkpoint itself, which the torchrun version keeps.
+- **Fork-based multi-GPU failed on Modal twice** (14:17, 14:21; pi0.5 on `H100:2`, a few minutes
+  each): "Cannot re-initialize CUDA in forked subprocess". Code in the parent (pi0.5 / Hugging Face
+  model loading) touches CUDA before the fork, and Lightning 2.6.6 no longer checks for that.
+  Setting `PYTORCH_NVML_BASED_CUDA_CHECK=1` didn't help.
+- **Switched to `torchrun`** (14:27): every GPU gets a fresh process, so it doesn't matter what the
+  parent touched. Local CPU test under torchrun (2 processes, gloo): Lightning started no extra
+  processes, the checkpoint has the real step count (6 of 6), weights trained, progress only from
+  rank 0. Studio's tests: 309 passed.
+
+Status: Modal app redeployed with the multi-GPU code (latest: 14:28, torchrun version). The backend part is active
+since the 13:11 restart, except `H100:8`, which was added later and needs one more backend restart.
 
 ## 4. Turning it on
 
@@ -79,22 +87,23 @@ PHYSICALAI_MODAL_IMAGE=ghcr.io/open-edge-platform/physicalai-trainer-cuda:main \
 .venv/bin/python -m modal deploy --env main src/trainer/modal_app.py
 ```
 
-Until b) is done, don't submit `H100:2` or `H100:4`: the job would get (and pay for) N GPUs but
-train on one.
+Both parts are done (backend restarted 14:36 with the fixes, Modal app redeployed 14:32).
 
-## 5. Smoke tests after turning it on (a few minutes each, about $3–6 total)
+## 5. Test runs on Modal (2026-11-14)
 
-1. **Single GPU still fine:** short job, `"modal_gpu": "H100"`, `"max_steps": 200`. It completes,
-   exports, and the checkpoint step is 200.
-2. **2 GPUs:** same with `"modal_gpu": "H100:2"`, `"batch_size": 32`, `"max_steps": 300`. While it
-   runs, `modal container list` and then
-   `modal container exec <id> nvidia-smi` should show both GPUs busy. Studio shows live progress.
-   The checkpoint step is 300 and the OpenVINO export exists.
-3. **4 GPUs:** `"modal_gpu": "H100:4"`, `"batch_size": 16`, same checks.
-4. Offline test of one export (the script used for v1/v2) to check the outputs look sane.
+**Length is set in epochs only.** Studio ignores `max_steps` (a legacy field): with `max_epochs`
+missing it trains 100 epochs. Use a small dataset and `"max_epochs": 1` for short tests.
 
-If 2) fails, the fallback is to start the GPU processes with `torchrun` instead of forking; see
-`~/.claude/plans/splendid-snacking-hejlsberg.md`.
+| Time | Run | Result |
+|---|---|---|
+| 14:17 | pi0.5, `H100:2`, fork-based | Failed: "Cannot re-initialize CUDA in forked subprocess" |
+| 14:21 | same, with `PYTORCH_NVML_BASED_CUDA_CHECK=1` | Same failure |
+| 14:31 | pi0.5, `H100:2`, torchrun | Both ranks started, then failed: Hugging Face 401 (the `env=` option had replaced the HF_TOKEN secret) |
+| 14:42 | pi0.5, `H100:2`, torchrun, token fixed | **Trained on both GPUs** (100% and 81% busy, about 53 GB each). Cancelled: `max_steps` was ignored, so it was set for 100 epochs |
+| 14:43 | pi0.5, `H100:2`, small dataset `eka`, 1 epoch | Checks the end of a run: final checkpoint, export on rank 0, model download |
+
+To see the GPUs while a job runs: `modal container list`, then
+`modal container exec <id> nvidia-smi`.
 
 ## 6. Submitting a multi-GPU job
 
@@ -146,7 +155,42 @@ at batch 32" worth of training, use the same number of epochs; the step count ha
 
 Modal warns that more than 2 GPUs in one container can mean longer waits for capacity.
 
-## 8. Undo
+## 8. Smaller model downloads (2026-11-14)
+
+A pi0.5 model package from Modal was **33.7 GB**, most of it the optimizer state inside
+`model.ckpt`. On the venue Wi-Fi (about 25 MB/s at best) that's 25–40 minutes per model.
+
+**Two changes, both in `physical-ai-studio/application/backend/src`:**
+
+| Change | File | Active after |
+|---|---|---|
+| Downloads go to a folder next to the model's output folder (on the SSD), not `/tmp`. `/tmp` here is a 31 GB RAM disk with a per-user quota; the first pi0.5 test download failed with "Disk quota exceeded" at 23 GB. | `services/training_backends/modal.py` | Backend restart (done 15:52) |
+| **Full checkpoints stay on Modal.** After training, the job copies `model.ckpt` with its optimizer state to the Modal Volume, then ships a weights-only `model.ckpt` plus the export. | `training/job.py` (`_offload_full_checkpoints`), `trainer/modal_app.py` (sets `PHYSICALAI_FULL_CHECKPOINT_DIR`) | Modal redeploy: **done 16:17** |
+
+- **What the laptop still gets:** the OpenVINO export (to run the model) and a weights-only
+  `model.ckpt`. That's enough for Studio's "retrain from this model" and for re-exporting: both load
+  weights with `load_from_checkpoint`. Only continuing the exact same run needs the optimizer state.
+- **Expected size for pi0.5:** about 13–14 GB instead of 34 (about 9–10 min on this Wi-Fi).
+  SmolVLA packages shrink too.
+- **Where the full checkpoint is:** on the Modal Volume, `jobs/<Studio job id>/full-checkpoint/model.ckpt`.
+  Fetch it with:
+
+  ```bash
+  cd ~/intel-robot-challenge/physical-ai-studio/application/backend
+  .venv/bin/python -m modal volume get --env main physicalai-training-bbbcdfa03cd74755b4c1c81cde8483db \
+      jobs/<job id>/full-checkpoint/model.ckpt ./model-full.ckpt
+  ```
+
+- **Storage:** these files pile up on the Volume (about 27 GB per pi0.5 run). Delete old job
+  folders with `modal volume rm --env main <volume> jobs/<job id> -r` when they're no longer needed.
+- **Checked:** a real Lightning checkpoint, before and after: the full copy keeps the optimizer
+  state; the shipped file has none, keeps the step count, is 63% smaller in that test, and loads
+  with `load_from_checkpoint` with identical weights. Without the environment variable (local
+  training in Studio) nothing changes. Two new tests in
+  `tests/training/test_offload_full_checkpoint.py`; Studio's tests: 270 passed.
+- **Doesn't apply to** `Pi0.5-v2-8gpu` (started before this change): its package is 34 GB.
+
+## 9. Undo
 
 ```bash
 git -C ~/intel-robot-challenge/physical-ai-studio checkout -- application/backend

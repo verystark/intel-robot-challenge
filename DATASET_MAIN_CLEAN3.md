@@ -109,7 +109,8 @@ from home or from a lifted pose, which are the two start poses the sort episodes
 | `main-clean` | `127c9227-8cf9-4e28-af00-8a6d7769e1d2` | 108 | Same as E1–E108 here | `SmolVLA` (first model, epoch-3 snapshot, jerky) |
 | `main-clean2` | `985acd05-dbae-45d5-ae9a-ab9e556b77a8` | 315 | E1–E310 here, plus 5 episodes removed since (3 in the cleaning that made `main-clean3`, then the old E147 and E148) | `SmolVLA-v2` |
 | `main-picks` | `107b6589-0b45-4440-8b73-fbae6b7e3844` | 158 | The picks of `main-clean2`, mixed endings | `ACT-pick-v1` |
-| `main-clean3` | `ba1139d1-a28c-40bf-bc44-3fb1800e24f6` | 486 | This file | – |
+| `main-clean3` | `ba1139d1-a28c-40bf-bc44-3fb1800e24f6` | 486 | This file | `Pi0.5` (team run, 10% validation) |
+| `main-clean4` | `cf96b132-2e62-42e3-8885-9cf5b756a1c0` | 424 | `main-clean3` minus the 62 picks that end at home (problem 1): 182 pick / 129 good / 113 defective, 81,867 frames. Every pick ends lifted; all sorts kept. Delete list: `~/dataset-backups/main-clean4-delete-options.json` (option C) | – (planned: pi0.5, validation 0) |
 
 ## Reading the files
 
