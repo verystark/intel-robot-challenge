@@ -1,0 +1,145 @@
+{
+ "note": "Real show-pose photos from loop runs on 2026-11-14 (0-degree stop, 720 px crops). Labelled by eye: 'abnormal' = black marker scribbles visible. Defective bricks here are mostly white / light blue; no clean white brick is in the set yet.",
+ "photos": {
+  "loop/runs/20261114_180913/c001_0deg.jpg": {
+   "label": "excluded",
+   "why": "dark brown brick, defect status unclear"
+  },
+  "loop/runs/20261114_181059/c001_0deg.jpg": {
+   "label": "test_normal",
+   "file": "test_normal/run20261114_181059_c001_0deg.png"
+  },
+  "loop/runs/20261114_181059/c002_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_181059_c002_0deg.png"
+  },
+  "loop/runs/20261114_181059/c003_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_181059_c003_0deg.png"
+  },
+  "loop/runs/20261114_181059/c004_0deg.jpg": {
+   "label": "test_normal",
+   "file": "test_normal/run20261114_181059_c004_0deg.png"
+  },
+  "loop/runs/20261114_181059/c005_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_181059_c005_0deg.png"
+  },
+  "loop/runs/20261114_181059/c006_0deg.jpg": {
+   "label": "abnormal",
+   "file": "abnormal/run20261114_181059_c006_0deg.png"
+  },
+  "loop/runs/20261114_181059/c007_0deg.jpg": {
+   "label": "abnormal",
+   "file": "abnormal/run20261114_181059_c007_0deg.png"
+  },
+  "loop/runs/20261114_181059/c008_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_181059_c008_0deg.png"
+  },
+  "loop/runs/20261114_181059/c009_0deg.jpg": {
+   "label": "test_normal",
+   "file": "test_normal/run20261114_181059_c009_0deg.png"
+  },
+  "loop/runs/20261114_190032/c002_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c002_0deg.png"
+  },
+  "loop/runs/20261114_190032/c003_0deg.jpg": {
+   "label": "abnormal",
+   "file": "abnormal/run20261114_190032_c003_0deg.png"
+  },
+  "loop/runs/20261114_190032/c004_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c004_0deg.png"
+  },
+  "loop/runs/20261114_190032/c006_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c006_0deg.png"
+  },
+  "loop/runs/20261114_190032/c007_0deg.jpg": {
+   "label": "abnormal",
+   "file": "abnormal/run20261114_190032_c007_0deg.png"
+  },
+  "loop/runs/20261114_190032/c010_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c010_0deg.png"
+  },
+  "loop/runs/20261114_190032/c011_0deg.jpg": {
+   "label": "test_normal",
+   "file": "test_normal/run20261114_190032_c011_0deg.png"
+  },
+  "loop/runs/20261114_190032/c013_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c013_0deg.png"
+  },
+  "loop/runs/20261114_190032/c014_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c014_0deg.png"
+  },
+  "loop/runs/20261114_190032/c015_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c015_0deg.png"
+  },
+  "loop/runs/20261114_190032/c017_0deg.jpg": {
+   "label": "test_normal",
+   "file": "test_normal/run20261114_190032_c017_0deg.png"
+  },
+  "loop/runs/20261114_190032/c018_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c018_0deg.png"
+  },
+  "loop/runs/20261114_190032/c019_0deg.jpg": {
+   "label": "abnormal",
+   "file": "abnormal/run20261114_190032_c019_0deg.png"
+  },
+  "loop/runs/20261114_190032/c020_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c020_0deg.png"
+  },
+  "loop/runs/20261114_190032/c021_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c021_0deg.png"
+  },
+  "loop/runs/20261114_190032/c023_0deg.jpg": {
+   "label": "abnormal",
+   "file": "abnormal/run20261114_190032_c023_0deg.png"
+  },
+  "loop/runs/20261114_190032/c028_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c028_0deg.png"
+  },
+  "loop/runs/20261114_190032/c029_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c029_0deg.png"
+  },
+  "loop/runs/20261114_190032/c031_0deg.jpg": {
+   "label": "test_normal",
+   "file": "test_normal/run20261114_190032_c031_0deg.png"
+  },
+  "loop/runs/20261114_190032/c033_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c033_0deg.png"
+  },
+  "loop/runs/20261114_190032/c034_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c034_0deg.png"
+  },
+  "loop/runs/20261114_190032/c035_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c035_0deg.png"
+  },
+  "loop/runs/20261114_190032/c037_0deg.jpg": {
+   "label": "normal",
+   "file": "normal/run20261114_190032_c037_0deg.png"
+  },
+  "loop/runs/20261114_190032/c040_0deg.jpg": {
+   "label": "abnormal",
+   "file": "abnormal/run20261114_190032_c040_0deg.png"
+  },
+  "loop/runs/20261114_192355/c001_90deg.jpg": {
+   "label": "excluded",
+   "why": "the only 90-degree view"
+  }
+ }
+}

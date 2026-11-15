@@ -21,6 +21,9 @@ cameras      Anomalib    VLA policy  SO-101      OpenVINO
 | `inspect_live.py` | Live test of the trained model: show a brick to the camera, see GOOD / UNSURE / DEFECTIVE, the anomaly score, a heatmap and the time per check |
 | `detector.py` | Runs the exported model with plain OpenVINO (works in Studio's venv too); bands and verdict rule. Used by the loop and the benchmarks |
 | `calibrate_bands.py` | Sets the good / unsure / defective bands from `test_normal` and `abnormal` scores on the loop's device, writes `bands.json` |
+| `roi.py`, `roi.json` | **Only the brick is scored.** Finds the brick at the red finger tips in every crop and cuts a fixed 360 px square around it. `train_export.py --roi` trains on these squares and copies `roi.json` next to the model; `detector.py` then cuts the same square. See "Scoring only the brick" below |
+| `dataset_show/` | Photos at the scripted show pose, from loop runs (0°) and `show_tool.py collect` (±90°). `excluded/` holds takes without a brick |
+| `dataset_brick/` | Symlinks: `dataset/` + `dataset_show/` in one set, for training the brick-square model on all photos |
 | `quantize_int8.py` | Weight-only INT8 copy of the model in `exported_model_int8/` (4x smaller, scores within ~0.06); `--mode full` for full INT8 (moves scores a lot) |
 | `requirements.txt` | Python dependencies |
 
@@ -144,9 +147,35 @@ How PatchCore works: a pretrained ResNet18 describes each small patch of every g
 stores a memory of these "normal" patches. A new image is scored by how far its patches are from the
 nearest normal patch — high distance = anomaly, which also gives a heatmap. One epoch is enough.
 
+## Scoring only the brick
+
+The whole box crop also shows the gripper, the wrist camera's orange bracket, the table edge and
+bricks lying on the table. Before this, anything new there made the score jump. The first live run
+(2026-11-14 20:16) rejected a clean yellow brick with a score of 1.0: the heatmap was hot on the
+bracket and a loose brick, not on the brick in the gripper.
+
+Now `roi.json` is `{"mode": "brick", "size": 0.5}`:
+- `roi.find_brick` finds the red fingers by colour and takes the brick-coloured pixels near their
+  tips. A red or dark brick falls back to a point just inside the tips. A long thin red strip is
+  ignored: that's the table edge.
+- The model scores a 360 px square centred there. Outside it the heatmap is dimmed, and a white
+  outline marks the square, in the saved photos, the operator screen and `inspect_live.py`.
+- The square is centred on the brick, not fixed in the frame, so photos from any arm pose train
+  the same view. The old hand-held `dataset/` photos are usable again.
+
+Train and calibrate:
+
+```bash
+../.venv/bin/python train_export.py --dataset dataset_brick --roi --int8 --coreset 0.02
+../.venv/bin/python calibrate_bands.py --dataset dataset_show     # the show pose the loop sees
+```
+
+Check the squares when adding photos: a take where the brick fell out goes in `dataset_show/excluded/`.
+
 ## Status
 
 Done:
+- [x] Score only the brick (`roi.py`, brick mode), trained on `dataset_brick` (2026-11-14)
 - [x] Capture tool
 - [x] Train + OpenVINO export script
 - [x] Shared config for box size/position so capture and inspection crop identically (`camera.py` + `camera_config.json`)

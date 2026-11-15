@@ -98,13 +98,53 @@ def make_engine(accelerator: str) -> Engine:
     return Engine(accelerator="cpu", max_epochs=1, default_root_dir=RESULTS_DIR)
 
 
-def make_model(coreset: float = 0.1) -> Patchcore:
+def make_model(coreset: float = 0.1, backbone: str = "resnet18") -> Patchcore:
     return Patchcore(
-        backbone="resnet18",
+        backbone=backbone,
         coreset_sampling_ratio=coreset,
         layers=["layer2", "layer3"],
         pre_processor=Patchcore.configure_pre_processor(image_size=IMAGE_SIZE),
     )
+
+
+def prepare_dataset(source: Path, roi: dict | None, flip: bool, extra_normal: int = 0) -> Path:
+    """A training copy of the dataset: the brick region only (roi) and/or flipped good photos.
+
+    Turning the wrist 180 degrees shows the brick upside down, so a vertically flipped copy
+    of each good photo stands in for that view.
+    """
+    import shutil
+
+    import cv2
+    from roi import apply_roi
+
+    out = RESULTS_DIR / "prepared_dataset"
+    shutil.rmtree(out, ignore_errors=True)
+    for sub in SUBDIRS:
+        (out / sub).mkdir(parents=True, exist_ok=True)
+        for path in sorted((source / sub).glob("*.png")) if (source / sub).exists() else []:
+            image = apply_roi(cv2.imread(str(path)), roi)
+            cv2.imwrite(str(out / sub / path.name), image)
+            if flip and sub == "normal":
+                cv2.imwrite(str(out / sub / f"flip_{path.name}"), cv2.flip(image, 0))
+    if extra_normal:
+        # Good bricks from the older, hand-held photos: other pose, but every colour and many
+        # sides, so the model learns what clean brick surfaces look like. Resized to the
+        # training size so all photos match.
+        size = None
+        for path in sorted((out / "normal").glob("*.png")):
+            size = cv2.imread(str(path)).shape[:2]
+            break
+        old = sorted((HERE / "dataset" / "normal").glob("*.png"))
+        step = max(1, len(old) // extra_normal)
+        for path in old[::step][:extra_normal]:
+            image = cv2.imread(str(path))
+            if roi and roi.get("mode") == "brick":
+                image = apply_roi(image, roi)  # the square around the brick works at any pose
+            if size and image.shape[:2] != size:
+                image = cv2.resize(image, (size[1], size[0]), interpolation=cv2.INTER_AREA)
+            cv2.imwrite(str(out / "normal" / f"old_{path.name}"), image)
+    return out
 
 
 def main() -> None:
@@ -119,8 +159,25 @@ def main() -> None:
                              "photos use 0.02: 5x smaller memory and faster, and the last step needs far less RAM")
     parser.add_argument("--dataset", default="dataset",
                         help="photo folder under anomaly/ (default dataset; dataset_show = photos from show_tool collect)")
+    parser.add_argument("--roi", action="store_true",
+                        help="train on the brick region only (roi.json); the export carries it, so the loop applies it too")
+    parser.add_argument("--extra-normal", type=int, default=0,
+                        help="also train on this many good photos from the older dataset/normal (other pose, all colours)")
+    parser.add_argument("--backbone", default="resnet18", help="PatchCore backbone (resnet18, wide_resnet50_2)")
+    parser.add_argument("--flip", action="store_true",
+                        help="add a vertically flipped copy of each good photo (the brick seen after a 180-degree turn)")
     args = parser.parse_args()
     DATASET_DIR = HERE / args.dataset
+    from roi import describe, load_roi
+
+    roi = load_roi() if args.roi else None
+    if args.roi and roi is None:
+        raise SystemExit("--roi needs anomaly/roi.json")
+    if roi or args.flip or args.extra_normal:
+        print(f"Preparing a training copy of {DATASET_DIR.name}: "
+              f"{describe(roi)}"
+              f"{', plus flipped good photos' if args.flip else ''}")
+        DATASET_DIR = prepare_dataset(DATASET_DIR, roi, args.flip, args.extra_normal)
 
     print(f"Dataset: {DATASET_DIR}")
     crop_size, has_defects = check_dataset()
@@ -145,7 +202,7 @@ def main() -> None:
     if accelerator == "auto":
         accelerator = "xpu" if xpu_available() else "cpu"
 
-    model = make_model(args.coreset)
+    model = make_model(args.coreset, args.backbone)
     engine = make_engine(accelerator)
     print(f"\nTraining PatchCore on {'the Intel GPU (xpu)' if accelerator == 'xpu' else 'the CPU'}...")
     start = time.perf_counter()
@@ -156,7 +213,7 @@ def main() -> None:
             raise
         print(f"\nTraining on the Intel GPU failed ({type(error).__name__}: {error}). Retrying on the CPU...")
         accelerator = "cpu"
-        model, engine = make_model(args.coreset), make_engine("cpu")
+        model, engine = make_model(args.coreset, args.backbone), make_engine("cpu")
         start = time.perf_counter()
         engine.fit(model=model, datamodule=datamodule)
     train_s = time.perf_counter() - start
@@ -179,6 +236,16 @@ def main() -> None:
     }
     print(f"\nExporting to OpenVINO IR (input: 1 crop of {crop_size[1]}x{crop_size[0]})...")
     export_path = engine.export(export_root=EXPORT_DIR, **export_kwargs)
+    # The detector cuts the same brick region when the model folder has roi.json; a model
+    # trained on whole crops must not inherit an old one.
+    import json as _json
+
+    for folder in (EXPORT_DIR, EXPORT_DIR_INT8):
+        if roi:
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "roi.json").write_text(_json.dumps(roi, indent=1) + "\n")
+        elif (folder / "roi.json").exists():
+            (folder / "roi.json").unlink()
     int8_path = None
     if args.int8:
         # Weight-only INT8 of the exported model (see quantize_int8.py for why not full INT8).

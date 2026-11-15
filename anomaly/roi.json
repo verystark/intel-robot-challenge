@@ -1,0 +1,5 @@
+{
+ "note": "Score only a square around the brick, found in every crop at the red finger tips (see roi.py). size = the square's side as a fraction of the camera box crop (720 px -> 360 px). Replaces the fixed box {x0 0.12, y0 0.22, x1 0.62, y1 0.98}, which only fitted the 0-degree view.",
+ "mode": "brick",
+ "size": 0.5
+}

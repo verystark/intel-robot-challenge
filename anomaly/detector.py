@@ -30,6 +30,7 @@ BANDS_PATH = HERE / "bands.json"
 CACHE_DIR = HERE / "openvino_cache"
 
 GOOD, UNSURE, DEFECTIVE = "GOOD", "UNSURE", "DEFECTIVE"
+OUTSIDE = -1.0  # anomaly-map value where the model didn't look (outside the brick square)
 
 
 class Detector:
@@ -52,26 +53,59 @@ class Detector:
         shape = self.compiled.input(0).get_partial_shape()
         self.input_hw = (shape[2].get_length(), shape[3].get_length()) if shape.is_static else None
         self.outputs = {next(iter(o.get_names())): o for o in self.compiled.outputs}
+        # A model trained with train_export.py --roi scores only the brick region: its folder
+        # (exported_model/) carries roi.json, and score() cuts that region from the full crop
+        # (see roi.py). Without roi.json the whole crop is scored.
+        from roi import load_roi
 
-    def score(self, crop_bgr: np.ndarray) -> tuple[float, np.ndarray, float]:
-        """Score one crop (BGR, as OpenCV reads it).
+        self.roi = load_roi(self.model_xml.parents[2] / "roi.json")
+        self.last_box: tuple[int, int, int, int] | None = None  # the region the last score() used
 
-        Returns the normalised score (0.5 = threshold), the anomaly map resized to the
-        crop (float, roughly 0..1) and the inference time in ms.
-        """
-        if self.input_hw and crop_bgr.shape[:2] != self.input_hw:
-            raise ValueError(
-                f"Crop is {crop_bgr.shape[1]}x{crop_bgr.shape[0]} but the model expects "
-                f"{self.input_hw[1]}x{self.input_hw[0]}: the box changed since training."
-            )
-        rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+    def accepts(self, crop_shape: tuple[int, ...]) -> bool:
+        """Whether crops of this size give the region size the model was exported for."""
+        from roi import roi_box
+
+        if self.input_hw is None:
+            return True
+        x0, y0, x1, y1 = roi_box(np.zeros(crop_shape[:2] + (3,), np.uint8), self.roi)
+        return (y1 - y0, x1 - x0) == self.input_hw
+
+    def warmup(self) -> None:
+        """One inference on a blank input, so the first real photo isn't slowed by lazy setup."""
+        h, w = self.input_hw or (256, 256)
+        self._infer(np.zeros((h, w, 3), np.uint8))
+
+    def _infer(self, region_bgr: np.ndarray) -> tuple[float, np.ndarray, float]:
+        rgb = cv2.cvtColor(region_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         tensor = np.ascontiguousarray(rgb.transpose(2, 0, 1)[np.newaxis])
         start = time.perf_counter()
         result = self.request.infer({0: tensor})
         ms = (time.perf_counter() - start) * 1000
         score = float(np.asarray(result[self.outputs["pred_score"]]).reshape(-1)[0])
         heat = np.asarray(result[self.outputs["anomaly_map"]], dtype=np.float32).squeeze()
-        heat = cv2.resize(heat, (crop_bgr.shape[1], crop_bgr.shape[0]))
+        return score, cv2.resize(heat, (region_bgr.shape[1], region_bgr.shape[0])), ms
+
+    def score(self, crop_bgr: np.ndarray) -> tuple[float, np.ndarray, float]:
+        """Score one crop (BGR, as OpenCV reads it).
+
+        Returns the normalised score (0.5 = threshold), the anomaly map at the crop's size
+        (float, roughly 0..1; OUTSIDE (-1) where the model didn't look) and the inference time in ms.
+        """
+        from roi import roi_box
+
+        x0, y0, x1, y1 = self.last_box = roi_box(crop_bgr, self.roi)
+        region = crop_bgr[y0:y1, x0:x1]
+        if self.input_hw and region.shape[:2] != self.input_hw:
+            raise ValueError(
+                f"Crop is {crop_bgr.shape[1]}x{crop_bgr.shape[0]}, which gives a {region.shape[1]}x"
+                f"{region.shape[0]} region, but the model expects {self.input_hw[1]}x{self.input_hw[0]}: "
+                "the box changed since training."
+            )
+        score, heat, ms = self._infer(region)
+        if region.shape[:2] != crop_bgr.shape[:2]:  # put the region's map back at its place in the crop
+            canvas = np.full(crop_bgr.shape[:2], OUTSIDE, np.float32)
+            canvas[y0:y1, x0:x1] = heat
+            heat = canvas
         return score, heat, ms
 
 
@@ -114,5 +148,15 @@ def verdict(scores: list[float], bands: Bands) -> str:
 
 
 def heatmap_overlay(crop_bgr: np.ndarray, heat: np.ndarray, alpha: float = 0.45) -> np.ndarray:
+    """The crop with the anomaly map on top. Where the model didn't look (OUTSIDE), the crop is
+    dimmed and uncoloured, and a white outline marks the square it scored."""
     colour = cv2.applyColorMap((np.clip(heat, 0, 1) * 255).astype(np.uint8), cv2.COLORMAP_JET)
-    return cv2.addWeighted(crop_bgr, 1 - alpha, colour, alpha, 0)
+    out = cv2.addWeighted(crop_bgr, 1 - alpha, colour, alpha, 0)
+    outside = heat < OUTSIDE / 2
+    if outside.any():
+        out[outside] = (crop_bgr[outside] * 0.55).astype(np.uint8)
+        ys, xs = np.nonzero(~outside)
+        if len(xs):
+            thick = max(1, crop_bgr.shape[1] // 240)
+            cv2.rectangle(out, (int(xs.min()), int(ys.min())), (int(xs.max()), int(ys.max())), (255, 255, 255), thick)
+    return out

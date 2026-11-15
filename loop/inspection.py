@@ -113,8 +113,7 @@ class Scorer:
         self.pending = 0  # photos queued or being scored (the live scorer waits while > 0)
         self._plock = threading.Lock()
         # Warm up so the first real photo isn't slowed by lazy initialisation.
-        h, w = self.detector.input_hw or (256, 256)
-        self.detector.score(np.zeros((h, w, 3), np.uint8))
+        self.detector.warmup()
 
     def submit(self, crop: np.ndarray) -> Future:
         with self._plock:
@@ -160,7 +159,7 @@ class LiveScorer:
                     frame = self.camera.latest()
                     if frame is not None:
                         crop = self.camera.crop(frame)
-                        if self.detector.input_hw is None or crop.shape[:2] == self.detector.input_hw:
+                        if self.detector.accepts(crop.shape):
                             score, heat, _ = self.detector.score(crop)
                             self.telemetry.put_live(score, self._label(score, self.bands_fn()), self.moving_fn(), heat)
             except Exception:  # noqa: BLE001  (the screen must never take the loop down)

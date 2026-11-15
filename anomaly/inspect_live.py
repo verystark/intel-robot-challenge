@@ -94,10 +94,15 @@ def main() -> None:
         sys.exit(f"No model at {args.model}\nTrain one first: ../.venv/bin/python train_export.py")
 
     cfg = CameraConfig.load()
+    from roi import apply_roi, load_roi, roi_box
+
+    # A model trained with train_export.py --roi scores only the brick region of the box crop.
+    roi = load_roi(args.model.parents[2] / "roi.json")
+    want = apply_roi(np.zeros((cfg.box_size, cfg.box_size, 3), np.uint8), roi).shape[:2]
     expected = model_input_size(args.model)
-    if expected and expected != (cfg.box_size, cfg.box_size):
+    if expected and expected != want:
         sys.exit(
-            f"The model expects {expected[1]}x{expected[0]} crops but the box is {cfg.box_size}px.\n"
+            f"The model expects {expected[1]}x{expected[0]} crops but the box gives {want[1]}x{want[0]}.\n"
             "The box changed after training: retrain (after recrop.py) or put the box back."
         )
 
@@ -123,7 +128,9 @@ def main() -> None:
                     sys.exit(f"Camera {cfg.device} stopped delivering frames.")
 
                 crop = crop_box(frame, cfg)
-                rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0  # as read_image() gives
+                rx0, ry0, rx1, ry1 = roi_box(crop, roi)
+                region = crop[ry0:ry1, rx0:rx1]
+                rgb = cv2.cvtColor(region, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0  # as read_image() gives
 
                 start = time.perf_counter()
                 result = inferencer.predict(rgb)
@@ -137,7 +144,10 @@ def main() -> None:
                 shown = frame.copy()
                 anomaly_map = getattr(result, "anomaly_map", None)
                 if show_heatmap and anomaly_map is not None:
-                    shown[y0:y1, x0:x1] = heatmap_overlay(crop, anomaly_map)
+                    if roi:
+                        shown[y0 + ry0:y0 + ry1, x0 + rx0:x0 + rx1] = heatmap_overlay(region, anomaly_map)
+                    else:
+                        shown[y0:y1, x0:x1] = heatmap_overlay(crop, anomaly_map)
 
                 scale = min(1.0, DISPLAY_MAX_WIDTH / frame.shape[1])
                 display = cv2.resize(shown, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
