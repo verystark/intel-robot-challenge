@@ -1,0 +1,53 @@
+{
+  "_comment": "Hand-maintained facts for the video. Change them here, then run scripts/build_data.py. Sources in brackets.",
+  "dataset": {
+    "name": "main-clean2",
+    "episodes": 315,
+    "picks": 158,
+    "sorts": 157,
+    "labels_checked": "main-clean3: 242 / 242 sort labels checked",
+    "_source": "Fallback only: scripts/coverage.py counts the sort model's real dataset and build_data.py uses that. main-clean2 = SmolVLA-v2 and v2-long (MODEL_RUN_NOTES.md)"
+  },
+  "models": {
+    "pick": {
+      "name": "SmolVLA-v2-long",
+      "device": "GPU"
+    },
+    "sort": {
+      "name": "SmolVLA-v2-long",
+      "device": "GPU"
+    },
+    "anomaly": {
+      "name": "PatchCore",
+      "device": "GPU"
+    },
+    "_source": "loop/cell_config.json during the filmed take. Default: latest:smolvla = SmolVLA-v2-long on the GPU for both stages (14:43, smoother than v2 offline). Rerun scripts/coverage.py after changing"
+  },
+  "sentences": {
+    "pick": "Pick up the brick.",
+    "GOOD": "The brick is good. Put it on the green plate.",
+    "DEFECTIVE": "The brick is defective. Put it on the orange plate."
+  },
+  "laptop": "Intel Core Ultra X9 388H",
+  "repo_url": null,
+  "team": [],
+  "evaluation": {
+    "rounds": null,
+    "cycles": null,
+    "pick_first_try": null,
+    "verdict_correct": null,
+    "placed_as_told": null,
+    "correct_plate": null,
+    "median_cycle_s": null,
+    "failures": [],
+    "_source": "Filled automatically from video/layouts/round_*_eval.json (tools/eval_round.py). Set numbers here only to override them by hand."
+  },
+  "run_take": {
+    "loop_run": null,
+    "layout": null,
+    "footage_offset_s": 0,
+    "result_line": null,
+    "plate_swap_shown": true,
+    "_source": "the filmed round: its loop/runs folder, its layout file (video/layouts/round_NN.json), and the footage time where the log's first cycle starts. plate_swap_shown: set false if the mid-run plate swap failed in testing; the run scene then drops that part (VIDEO_PLAN 13.5)"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "measured": "2026-11-14 16:41:07",
+  "model_time": "2026-11-14 16:02:39",
+  "crops": 47,
+  "fp32_mb": 29.1,
+  "int8_mb": 7.4,
+  "score_diff_mean": 0.0153,
+  "score_diff_max": 0.0504
+}

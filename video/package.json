@@ -1,0 +1,24 @@
+{
+  "name": "jenssenit-video",
+  "private": true,
+  "description": "Submission video for the Intel Physical AI Challenge, rendered from code with Remotion",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Jenssenit out/jenssenit.mp4 --concurrency=4",
+    "still": "remotion still Jenssenit --frame=0 out/still.png",
+    "thumbnail": "remotion still Thumbnail out/thumbnail.png",
+    "deck": "nice -n 19 node scripts/deck.mjs && ../.venv/bin/python scripts/deck_pdf.py",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.540",
+    "@remotion/google-fonts": "4.0.540",
+    "react": "19.1.10",
+    "react-dom": "19.1.10",
+    "remotion": "4.0.540"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "typescript": "5.9.3"
+  }
+}

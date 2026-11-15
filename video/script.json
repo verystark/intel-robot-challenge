@@ -1,0 +1,10 @@
+{
+  "_comment": "Narration for the AI voice, one entry per scene (VIDEO_PLAN.md section 13). {caption|voice} gives the voice a different spelling from the captions. {{NAME}} is filled from public/data.json numbers. Scenes 1 and 6 have no narration: our own voices are in the footage.",
+  "s2": "A recorded motion only works if the brick is always in the same place. Here nothing is fixed, and there are no coordinates in our code. Picking and placing are learned.",
+  "s3": "The policy is {SmolVLA|Smol V L A}, a vision-language-action model. Camera images, joint positions and a task sentence go in; joint actions come out. It's fine-tuned on {{EPISODES}} teleoperated episodes.",
+  "s4": "Inspection is the one scripted step. A fixed pose and three wrist angles mean the anomaly model sees every brick the same way. {Anomalib's|Anomah-libs} {PatchCore,|Patch Core,} trained only on good bricks, scores each view.",
+  "s5": "The verdict becomes the {VLA's|V L A's} next task sentence. The model then finds the plate of that colour, wherever it is.",
+  "s7": "Across {{R}} random layouts and {{M}} cycles: {{P}} picks worked on the first try, the inspection was right {{I}} times, the policy put {{S}} bricks on the plate it was told, and {{E}} were right end to end.",
+  "s7_draft": "The evaluation results go here, once the random rounds are done.",
+  "s8": "All inference runs on the laptop with {OpenVINO.|Open Veeno.} {SmolVLA|Smol V L A} takes {{SORT_MS}} milliseconds per chunk on the GPU; {PatchCore,|Patch Core,} {{INSPECT_MS}} per view."
+}

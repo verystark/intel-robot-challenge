@@ -1,0 +1,265 @@
+{
+  "facts": {
+    "_comment": "Hand-maintained facts for the video. Change them here, then run scripts/build_data.py. Sources in brackets.",
+    "dataset": {
+      "name": "main-clean2",
+      "episodes": 315,
+      "picks": 158,
+      "sorts": 157,
+      "labels_checked": "main-clean3: 242 / 242 sort labels checked",
+      "_source": "Fallback only: scripts/coverage.py counts the sort model's real dataset and build_data.py uses that. main-clean2 = SmolVLA-v2 and v2-long (MODEL_RUN_NOTES.md)",
+      "model": "SmolVLA-v2-long"
+    },
+    "models": {
+      "pick": {
+        "name": "SmolVLA-v2-long",
+        "device": "GPU"
+      },
+      "sort": {
+        "name": "SmolVLA-v2-long",
+        "device": "GPU"
+      },
+      "anomaly": {
+        "name": "PatchCore",
+        "device": "GPU"
+      },
+      "_source": "loop/cell_config.json during the filmed take. Default: latest:smolvla = SmolVLA-v2-long on the GPU for both stages (14:43, smoother than v2 offline). Rerun scripts/coverage.py after changing"
+    },
+    "sentences": {
+      "pick": "Pick up the brick.",
+      "GOOD": "The brick is good. Put it on the green plate.",
+      "DEFECTIVE": "The brick is defective. Put it on the orange plate."
+    },
+    "laptop": "Intel Core Ultra X9 388H",
+    "repo_url": null,
+    "team": [],
+    "evaluation": {
+      "rounds": null,
+      "cycles": null,
+      "pick_first_try": null,
+      "verdict_correct": null,
+      "placed_as_told": null,
+      "correct_plate": null,
+      "median_cycle_s": null,
+      "failures": [],
+      "_source": "Filled automatically from video/layouts/round_*_eval.json (tools/eval_round.py). Set numbers here only to override them by hand."
+    },
+    "run_take": {
+      "loop_run": null,
+      "layout": null,
+      "footage_offset_s": 0,
+      "result_line": null,
+      "plate_swap_shown": true,
+      "_source": "the filmed round: its loop/runs folder, its layout file (video/layouts/round_NN.json), and the footage time where the log's first cycle starts. plate_swap_shown: set false if the mid-run plate swap failed in testing; the run scene then drops that part (VIDEO_PLAN 13.5)"
+    }
+  },
+  "numbers": {
+    "EPISODES": 315,
+    "PICKS": 158,
+    "SORTS": 157,
+    "PICK_MS": 213.7,
+    "SORT_MS": 213.7,
+    "INSPECT_MS": 17.94,
+    "R": null,
+    "M": null,
+    "P": null,
+    "I": null,
+    "S": null,
+    "E": null,
+    "X": null
+  },
+  "bench": {
+    "policy": [
+      {
+        "model": "SmolVLA-v2",
+        "device": "GPU",
+        "median_ms": 213.7,
+        "p95_ms": 221.8,
+        "chunk": 50
+      },
+      {
+        "model": "SmolVLA-v2",
+        "device": "CPU",
+        "median_ms": 4763.6,
+        "p95_ms": 7154.1,
+        "chunk": 50
+      },
+      {
+        "model": "ACT-pick-v1",
+        "device": "GPU",
+        "median_ms": 15.4,
+        "p95_ms": 20.2,
+        "chunk": 100
+      },
+      {
+        "model": "ACT-pick-v1",
+        "device": "CPU",
+        "median_ms": 218.1,
+        "p95_ms": 369.7,
+        "chunk": 100
+      },
+      {
+        "model": "ACT-pick-v1",
+        "device": "NPU",
+        "median_ms": 17.2,
+        "p95_ms": 22.1,
+        "chunk": 100
+      }
+    ],
+    "anomaly": [
+      {
+        "precision": "FP32",
+        "device": "CPU",
+        "median_ms": 56.11,
+        "size_mb": 29.1,
+        "score_diff_max": 0.0
+      },
+      {
+        "precision": "FP32",
+        "device": "GPU",
+        "median_ms": 17.94,
+        "size_mb": 29.1,
+        "score_diff_max": 0.0042
+      },
+      {
+        "precision": "FP32",
+        "device": "NPU",
+        "median_ms": 184.49,
+        "size_mb": 29.1,
+        "score_diff_max": 0.0471
+      },
+      {
+        "precision": "INT8 weights",
+        "device": "CPU",
+        "median_ms": 58.1,
+        "size_mb": 7.4,
+        "score_diff_max": 0.0504
+      },
+      {
+        "precision": "INT8 weights",
+        "device": "GPU",
+        "median_ms": 18.26,
+        "size_mb": 7.4,
+        "score_diff_max": 0.0504
+      },
+      {
+        "precision": "INT8 weights",
+        "device": "NPU",
+        "median_ms": 190.79,
+        "size_mb": 7.4,
+        "score_diff_max": 0.0504
+      }
+    ],
+    "policy_time": "2026-11-14 13:23:59",
+    "anomaly_time": "2026-11-14 13:29:06",
+    "contended": [
+      "policy: GPU 100% busy before start; CPU 28% busy before start",
+      "anomaly: GPU 79% busy before start"
+    ]
+  },
+  "run": {
+    "folder": "loop/runs/20261114_142151",
+    "cycles": [
+      {
+        "cycle": 1,
+        "start": "2026-11-14 14:21:52",
+        "pick": {
+          "result": "done",
+          "s": 8.72,
+          "inference_ms": {
+            "n": 9,
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.0
+          },
+          "clamped_ticks": 0
+        },
+        "inspect": {
+          "scores": [
+            0.8594,
+            0.7236
+          ],
+          "labels": [
+            "DEFECTIVE",
+            "DEFECTIVE"
+          ],
+          "verdict": "DEFECTIVE",
+          "rechecked": false,
+          "anomaly_ms": [
+            38.2,
+            34.7
+          ],
+          "device": "GPU",
+          "bands": [
+            0.4,
+            0.6
+          ]
+        },
+        "show_s": 5.49,
+        "sort": {
+          "result": "timeout",
+          "sentence": "The brick is defective. Put it on the orange plate.",
+          "s": 15.02,
+          "inference_ms": {
+            "n": 17,
+            "median": 0.0,
+            "p95": 0.0,
+            "max": 0.1
+          },
+          "clamped_ticks": 0
+        },
+        "total_s": 30.01,
+        "system": {
+          "pkg_temp_c": 76.0,
+          "cpu_pct": 25.5,
+          "gpu_pct": 57.3,
+          "npu_pct": 0.0,
+          "pkg_w": null,
+          "battery_w": null
+        }
+      }
+    ],
+    "images": [
+      {
+        "photo": "inspect/c001_view1.jpg",
+        "heat": "inspect/c001_view1_heat.jpg"
+      },
+      {
+        "photo": "inspect/c001_view2.jpg",
+        "heat": "inspect/c001_view2_heat.jpg"
+      }
+    ],
+    "sim": true,
+    "scores": [
+      0.8594,
+      0.7236
+    ]
+  },
+  "footage": {
+    "a1": false,
+    "a2": false,
+    "a3": false,
+    "a4": false,
+    "b1": false,
+    "b2": false,
+    "b3": false
+  },
+  "evaluation": {
+    "rounds": null,
+    "cycles": null,
+    "pick_first_try": null,
+    "verdict_correct": null,
+    "placed_as_told": null,
+    "correct_plate": null,
+    "median_cycle_s": null,
+    "failures": []
+  },
+  "trials": [],
+  "layout": null,
+  "draft": [
+    "run overlays come from a simulation run",
+    "no evaluation yet",
+    "no footage of the run yet",
+    "benchmarks measured on a busy laptop"
+  ]
+}
