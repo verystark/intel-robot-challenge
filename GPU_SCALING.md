@@ -42,6 +42,14 @@ Single-GPU jobs behave exactly as before: none of the multi-GPU code runs unless
 **Careful with git:** a `git pull` or `git submodule update` in `physical-ai-studio` can overwrite
 these edits. Check `git -C physical-ai-studio status` first.
 
+The submodule's remote is upstream Studio, so the edits aren't pushed there. They are saved in
+this repo as `patches/physical-ai-studio-multi-gpu.patch` (against submodule commit `285924d9`).
+To restore them on a clean checkout:
+
+```bash
+git -C physical-ai-studio apply ../patches/physical-ai-studio-multi-gpu.patch
+```
+
 ## 3. Checked so far
 
 - Studio's own tests for the touched code: **318 passed** (run from a throwaway environment, so

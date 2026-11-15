@@ -1,0 +1,823 @@
+diff --git a/application/backend/src/schemas/remote_trainer.py b/application/backend/src/schemas/remote_trainer.py
+index 6d46581f..e20e285f 100644
+--- a/application/backend/src/schemas/remote_trainer.py
++++ b/application/backend/src/schemas/remote_trainer.py
+@@ -220,7 +220,8 @@ class ModalConnection(BaseModel):
+         return value
+ 
+ 
+-ModalGpu = Literal["A10G", "A100-80GB", "H100"]
++# Junction 2026 station: ":N" asks Modal for N GPUs in one container (multi-GPU DDP, see GPU_SCALING.md).
++ModalGpu = Literal["A10G", "A100-80GB", "H100", "H100:2", "H100:4", "H100:8", "A100-80GB:2", "A100-80GB:4"]
+ 
+ 
+ class ModalDeploymentRequest(BaseModel):
+diff --git a/application/backend/src/services/training_backends/modal.py b/application/backend/src/services/training_backends/modal.py
+index ebccb4bb..e5d42b0c 100644
+--- a/application/backend/src/services/training_backends/modal.py
++++ b/application/backend/src/services/training_backends/modal.py
+@@ -39,6 +39,12 @@ if TYPE_CHECKING:
+ _CONNECTION_ERRORS = (AuthError, ModalConnectionError, InternalError, PermissionDeniedError, ServiceError)
+ 
+ 
++def modal_gpu_count(modal_gpu: str) -> int:
++    """Number of GPUs in a Modal GPU string such as ``"H100"`` (1) or ``"H100:4"`` (4)."""
++    _, _, count = modal_gpu.partition(":")
++    return int(count) if count else 1
++
++
+ class ModalTrainingBackend:
+     """Stage files on a Volume, persist the function call ID, and ingest the export."""
+ 
+@@ -71,7 +77,18 @@ class ModalTrainingBackend:
+             await self._check_stop(context, None)
+             context.progress(10, message="Starting Modal GPU function")
+             if isinstance(context.payload, RemoteTrainJobPayload) and context.payload.modal_gpu is not None:
+-                function = function.with_options(gpu=context.payload.modal_gpu)
++                gpus = modal_gpu_count(context.payload.modal_gpu)
++                if gpus > 1:
++                    # Junction 2026 station: one container with N GPUs, CPU and memory scaled with N.
++                    # The container counts its GPUs itself (trainer/modal_app.py). No env= here:
++                    # with_options implements env as a secret and would replace the HF_TOKEN secret.
++                    function = function.with_options(
++                        gpu=context.payload.modal_gpu,
++                        cpu=8 * gpus,
++                        memory=32768 * gpus,
++                    )
++                else:
++                    function = function.with_options(gpu=context.payload.modal_gpu)
+             call = await asyncio.to_thread(function.spawn, str(context.job.id))
+             if call is None:
+                 raise RuntimeError("Modal did not return a training call")
+@@ -85,7 +102,12 @@ class ModalTrainingBackend:
+         await self._wait(context, call, volume, prefix)
+         await self._check_stop(context, call)
+         context.progress(95, message="Downloading trained model from Modal")
+-        with tempfile.TemporaryDirectory(prefix="modal-model-") as directory:
++        # Junction 2026 station: download next to the model's output folder, not into /tmp. /tmp here is a 31 GB
++        # RAM disk with a per-user quota, and a pi0.5 artifact (checkpoint + optimizer state + export)
++        # is about 34 GB ("Disk quota exceeded" at 23 GB on 2026-11-14).
++        download_root = Path(context.output_dir).parent  # Studio's models folder, on disk
++        download_root.mkdir(parents=True, exist_ok=True)
++        with tempfile.TemporaryDirectory(prefix="modal-model-", dir=download_root) as directory:
+             archive = Path(directory) / "artifact.zip"
+             try:
+                 await asyncio.to_thread(self._download, context, volume, f"{prefix}/artifact.zip", archive)
+@@ -131,7 +153,15 @@ class ModalTrainingBackend:
+ 
+     @staticmethod
+     def _upload(context: TrainingContext, volume: modal.Volume, prefix: str, archive: Path) -> None:
+-        spec = build_spec(context).model_copy(update={"device_type": "cuda", "device_index": 0})
++        gpus = (
++            modal_gpu_count(context.payload.modal_gpu)
++            if isinstance(context.payload, RemoteTrainJobPayload) and context.payload.modal_gpu
++            else 1
++        )
++        # Multi-GPU jobs leave the index unset; training/device.py then uses all N GPUs.
++        spec = build_spec(context).model_copy(
++            update={"device_type": "cuda", "device_index": 0 if gpus == 1 else None}
++        )
+         total = archive.stat().st_size
+         logger.info("Uploading dataset snapshot to Modal Volume: {} ({})", archive.name, format_bytes(total))
+         started = time.monotonic()
+diff --git a/application/backend/src/services/training_targets/remote.py b/application/backend/src/services/training_targets/remote.py
+index 203e8ba3..45e4e8cf 100644
+--- a/application/backend/src/services/training_targets/remote.py
++++ b/application/backend/src/services/training_targets/remote.py
+@@ -75,6 +75,11 @@ class RemoteTrainingTargetHandler:
+         if not isinstance(payload, RemoteTrainJobPayload):
+             raise TypeError("RemoteTrainingTargetHandler.target_key requires a RemoteTrainJobPayload")
+         trainer_key = f"{TrainingTarget.REMOTE.value}:{payload.remote_trainer_id}"
+-        if payload.remote_trainer_url and payload.remote_trainer_url.startswith(("aws-batch://", "modal://")):
++        if payload.remote_trainer_url and payload.remote_trainer_url.startswith("modal://"):
++            # Junction 2026 station: every Modal job gets its own container and its own Volume folder
++            # (jobs/<job_id>/), so jobs with different model names may run side by side. The same
++            # model name still queues.
++            return f"batch:{payload.remote_trainer_id}:{payload.policy}:{payload.model_name}"
++        if payload.remote_trainer_url and payload.remote_trainer_url.startswith("aws-batch://"):
+             return f"batch:{payload.remote_trainer_id}:{payload.policy}"
+         return f"{trainer_key}:{payload.device.type}:{payload.device.index}" if payload.device else trainer_key
+diff --git a/application/backend/src/trainer/modal_app.py b/application/backend/src/trainer/modal_app.py
+index 5dbda125..a73be0fa 100644
+--- a/application/backend/src/trainer/modal_app.py
++++ b/application/backend/src/trainer/modal_app.py
+@@ -17,6 +17,13 @@ image = modal.Image.from_registry(
+     os.environ.get("PHYSICALAI_MODAL_IMAGE", "ghcr.io/open-edge-platform/physicalai-trainer-cuda:main"),
+     # The trainer image strips pip; Modal needs it to install its container runtime.
+     setup_dockerfile_commands=["RUN python -m ensurepip --default-pip"],
++).add_local_dir(
++    # Junction 2026 station: ship our training/ package over the image's copy (identical apart from
++    # the multi-GPU support in device.py and job.py; see GPU_SCALING.md in the team repo).
++    Path(__file__).resolve().parents[1] / "training",
++    "/app/src/training",
++    copy=True,
++    ignore=["**/__pycache__/**"],
+ )
+ secret_name = os.environ.get("PHYSICALAI_MODAL_SECRET")
+ 
+@@ -39,22 +46,73 @@ def train(job_id: str) -> int:
+     from trainer.batch.status import BatchJobStatus
+     from trainer.settings import get_settings
+ 
++    import threading
++
++    # Multi-GPU: the container knows how many GPUs it got; training/device.py and job.py read this.
++    gpus = _visible_gpu_count()
++    if gpus > 1:
++        os.environ["PHYSICALAI_NUM_GPUS"] = str(gpus)
++
+     job_id = str(UUID(job_id))
+     volume.reload()
+     root = Path("/training-jobs") / "jobs" / job_id
++    # Full checkpoints (with optimizer state) stay on the Volume; the laptop gets weights only
++    # (training/job.py, _offload_full_checkpoints). Fetch one with
++    # `modal volume get <volume> jobs/<job_id>/full-checkpoint/model.ckpt <local path>`.
++    os.environ["PHYSICALAI_FULL_CHECKPOINT_DIR"] = str(root / "full-checkpoint")
++    # Modal re-runs a preempted job from the start. If this job had already finished training (its
++    # full checkpoint is on the Volume), only export it (training/job.py, _export_completed_checkpoint).
++    completed = root / "full-checkpoint" / "model.ckpt"
++    if completed.is_file():
++        os.environ["PHYSICALAI_COMPLETED_CHECKPOINT"] = str(completed)
++        print(f"Restart of a finished run: exporting {completed} instead of training again", flush=True)
+     settings = BatchSettings(PHYSICALAI_BATCH_BUCKET="modal", PHYSICALAI_BATCH_JOB_PREFIX=f"jobs/{job_id}")
++    # Multi-GPU jobs train in separate processes (training/multi_gpu.py). Only this process uses
++    # Modal's client: it commits the Volume; the training processes never touch it.
++    parent_pid = os.getpid()
++    commit_lock = threading.Lock()
++
++    def commit() -> None:
++        with commit_lock:
++            volume.commit()
+ 
+     class VolumeJobStorage(LocalDirJobStorage):
+         def put_status(self, status: BatchJobStatus) -> None:
+             super().put_status(status)
+             # Commit metrics and artifacts before publishing their corresponding status.
+-            volume.commit()
++            if os.getpid() == parent_pid:
++                commit()
++
++    done = threading.Event()
++    if gpus > 1:
++
++        def commit_while_training() -> None:
++            # Publishes what rank 0 writes, at the backend's 5 s polling rate.
++            while not done.wait(5.0):
++                try:
++                    commit()
++                except Exception as error:  # noqa: BLE001 - a missed commit is retried 5 s later
++                    print(f"Volume commit failed, retrying: {error}")
++
++        threading.Thread(target=commit_while_training, name="volume-commit", daemon=True).start()
+ 
+     try:
+         return run(VolumeJobStorage(root, settings), settings)
+     finally:
+-        volume.commit()
++        done.set()
++        commit()
+         local = get_settings()
+         for path in (local.models_dir / job_id, local.storage_dir / "cache" / job_id):
+             shutil.rmtree(path, ignore_errors=True)
+         (local.archives_dir / f"{job_id}.zip").unlink(missing_ok=True)
++
++
++def _visible_gpu_count() -> int:
++    """GPUs visible in this container (1 if nvidia-smi can't tell)."""
++    import subprocess
++
++    try:
++        result = subprocess.run(["nvidia-smi", "--list-gpus"], capture_output=True, text=True, timeout=60, check=False)
++    except (OSError, subprocess.SubprocessError):
++        return 1
++    return max(1, sum(1 for line in result.stdout.splitlines() if line.startswith("GPU ")))
+diff --git a/application/backend/src/training/device.py b/application/backend/src/training/device.py
+index 8fff9ec0..f69d42f3 100644
+--- a/application/backend/src/training/device.py
++++ b/application/backend/src/training/device.py
+@@ -15,9 +15,23 @@ question of what to pass to :class:`physicalai.train.Trainer`.
+ 
+ from __future__ import annotations
+ 
++import os
++from typing import Any
++
+ ACCELERATOR_PREFERENCE: tuple[str, ...] = ("xpu", "cuda", "mps", "cpu")
+ """Auto-detection order. XPU first: this is the primary supported accelerator."""
+ 
++NUM_GPUS_ENV = "PHYSICALAI_NUM_GPUS"
++"""Set per call by the Modal backend for multi-GPU jobs (Junction 2026 station, see GPU_SCALING.md)."""
++
++
++def requested_gpu_count() -> int:
++    """Number of GPUs this run was given for data-parallel training; 1 unless ``PHYSICALAI_NUM_GPUS`` > 1."""
++    try:
++        return max(1, int(os.environ.get(NUM_GPUS_ENV, "1") or "1"))
++    except ValueError:
++        return 1
++
+ 
+ def resolve_accelerator(device_type: str | None = None) -> str:
+     """Return the Lightning accelerator string for a training run.
+@@ -48,7 +62,7 @@ def resolve_accelerator(device_type: str | None = None) -> str:
+     return "cpu"
+ 
+ 
+-def resolve_strategy(device_type: str | None = None) -> str:
++def resolve_strategy(device_type: str | None = None) -> Any:
+     """Return the Lightning strategy string for a training run.
+ 
+     XPU needs its own single-device strategy; everything else is covered by
+@@ -64,7 +78,15 @@ def resolve_strategy(device_type: str | None = None) -> str:
+         >>> resolve_strategy("cpu")
+         'auto'
+     """
+-    return "xpu_single" if resolve_accelerator(device_type) == "xpu" else "auto"
++    accelerator = resolve_accelerator(device_type)
++    if accelerator == "cuda" and requested_gpu_count() > 1:
++        # Multi-GPU runs inside torchrun processes (training.multi_gpu), so Lightning's default
++        # launcher sees the processes already exist and starts none. find_unused_parameters matches
++        # what the library would pick (pi0.5 freezes parts of the model).
++        from lightning.pytorch.strategies import DDPStrategy
++
++        return DDPStrategy(find_unused_parameters=True)
++    return "xpu_single" if accelerator == "xpu" else "auto"
+ 
+ 
+ def resolve_devices(device_index: int | None = None) -> list[int] | int:
+@@ -75,7 +97,8 @@ def resolve_devices(device_index: int | None = None) -> list[int] | int:
+             to let Lightning pick one device.
+ 
+     Returns:
+-        ``[device_index]`` when an index is given, otherwise ``1``.
++        ``[device_index]`` when an index is given, otherwise ``1`` (or ``PHYSICALAI_NUM_GPUS``
++        for a multi-GPU job).
+ 
+     Example:
+         >>> resolve_devices(2)
+@@ -83,4 +106,6 @@ def resolve_devices(device_index: int | None = None) -> list[int] | int:
+         >>> resolve_devices()
+         1
+     """
+-    return [device_index] if device_index is not None else 1
++    if device_index is not None:
++        return [device_index]
++    return requested_gpu_count()
+diff --git a/application/backend/src/training/job.py b/application/backend/src/training/job.py
+index f616405e..6ff60609 100644
+--- a/application/backend/src/training/job.py
++++ b/application/backend/src/training/job.py
+@@ -325,6 +325,31 @@ def _hf_token_env(token: SecretStr | None):
+             os.environ["HF_TOKEN"] = previous
+ 
+ 
++def _rank_zero_only(report: ReportFn) -> ReportFn:
++    """Forward progress reports from global rank 0 only (multi-GPU runs fork one process per GPU)."""
++
++    def forward(*args: Any, **kwargs: Any) -> Any:
++        import torch.distributed as dist
++
++        if dist.is_available() and dist.is_initialized() and dist.get_rank() != 0:
++            return None
++        return report(*args, **kwargs)
++
++    return forward
++
++
++def _final_checkpoint_callback(path: Path) -> Any:
++    """Callback that saves the last training step's checkpoint from inside the training processes."""
++    from lightning.pytorch.callbacks import Callback
++
++    class SaveFinalCheckpoint(Callback):
++        def on_train_end(self, trainer: Any, pl_module: Any) -> None:
++            # Collective: every rank calls it, rank 0 writes the file.
++            trainer.save_checkpoint(path)
++
++    return SaveFinalCheckpoint()
++
++
+ def run_training_job(
+     spec: TrainingJobSpec,
+     *,
+@@ -374,6 +399,32 @@ def run_training_job(
+         report: Telemetry sink, called with ``(progress, message, extra_info)``.
+         should_stop: Cooperative cancellation probe.
+     """
++    from training.device import requested_gpu_count, resolve_accelerator, resolve_devices, resolve_strategy
++    from training.multi_gpu import launch, under_torchrun
++
++    completed = os.environ.get(COMPLETED_CHECKPOINT_ENV)
++    if completed and Path(completed).is_file() and not under_torchrun():
++        # A restart (e.g. after a Modal preemption) of a run that had already finished training:
++        # export the saved checkpoint instead of training again.
++        _export_completed_checkpoint(
++            spec, Path(completed), output_dir=Path(output_dir), cache_dir=Path(cache_dir), report=report
++        )
++        return
++
++    if resolve_accelerator(spec.device_type) == "cuda" and requested_gpu_count() > 1 and not under_torchrun():
++        # Multi-GPU: train in fresh torchrun processes (one per GPU), not in this one. Imported nothing
++        # GPU-related yet, so this process never touches CUDA.
++        launch(
++            spec,
++            gpus=requested_gpu_count(),
++            dataset_root=dataset_root,
++            output_dir=output_dir,
++            cache_dir=cache_dir,
++            report=report,
++            should_stop=should_stop,
++        )
++        return
++
+     from lightning.pytorch.callbacks import ModelCheckpoint
+     from lightning.pytorch.loggers import CSVLogger
+     from physicalai.data import LeRobotDataModule
+@@ -381,10 +432,11 @@ def run_training_job(
+     from physicalai.train.trainer import Trainer
+     from physicalai.transforms import DefaultImageAugmentations
+ 
+-    from training.device import resolve_accelerator, resolve_devices, resolve_strategy
+-
+     with _hf_token_env(spec.run_options.hf_token):
+         accelerator = resolve_accelerator(spec.device_type)
++        gpus = requested_gpu_count() if accelerator == "cuda" else 1
++        if gpus > 1 and spec.auto_scale_batch_size:
++            raise ValueError("auto_scale_batch_size is not supported for multi-GPU training; set batch_size instead")
+         output_dir, cache_dir = Path(output_dir), Path(cache_dir)
+         cache_dir.mkdir(parents=True, exist_ok=True)
+ 
+@@ -394,6 +446,8 @@ def run_training_job(
+             train_batch_size=spec.batch_size,
+             num_workers=spec.num_workers,
+             val_split=spec.val_split,
++            # Multi-GPU: every rank builds its own datamodule, so the episode split must be seeded.
++            **({"val_split_seed": 0} if gpus > 1 else {}),
+             # Applied to the train split only; the datamodule leaves validation
+             # images untouched so eval loss stays comparable across runs.
+             image_transforms=DefaultImageAugmentations() if spec.augment_images else None,
+@@ -407,7 +461,15 @@ def run_training_job(
+             monitor="val/loss",
+             mode="min",
+         )
+-        callbacks: list[Any] = [checkpoint_callback, ProgressReportingCallback(report=report, should_stop=should_stop)]
++        progress_report = _rank_zero_only(report) if gpus > 1 else report
++        callbacks: list[Any] = [
++            checkpoint_callback,
++            ProgressReportingCallback(report=progress_report, should_stop=should_stop),
++        ]
++        if gpus > 1 and spec.val_split == 0:
++            # With forked ranks only the weights come back to this process, not the step count, so
++            # rank 0 saves the final checkpoint itself (what _ensure_checkpoint_exists would save).
++            callbacks.append(_final_checkpoint_callback(cache_dir / CHECKPOINT_NAME))
+         snapflow_callback = _build_snapflow_callback(spec)
+         if snapflow_callback is not None:
+             callbacks.append(snapflow_callback)
+@@ -431,6 +493,13 @@ def run_training_job(
+             return
+ 
+         _finalize_checkpoints(trainer, cache_dir, snapflow_callback=snapflow_callback)
++        if gpus > 1:
++            # Every rank closes its GPU communication here, together, while all are still in step.
++            # Without it the other ranks hung on exit (8×H100, 2026-11-14) and torchrun never returned.
++            _close_process_group()
++            if not trainer.is_global_zero:
++                return  # multi-GPU: rank 0 alone publishes and exports
++        _offload_full_checkpoints(cache_dir)
+         _publish(cache_dir, output_dir)
+ 
+         _detach_trainer(policy, trainer)
+@@ -485,6 +554,76 @@ def _load_policy_from_checkpoint(spec: TrainingJobSpec, checkpoint: Path) -> Pol
+     return policy
+ 
+ 
++COMPLETED_CHECKPOINT_ENV = "PHYSICALAI_COMPLETED_CHECKPOINT"
++"""Full checkpoint of a run that already finished training (set on Modal when a job restarts)."""
++
++
++def _close_process_group() -> None:
++    """Close torch.distributed on this rank (collective: every rank calls it at the same point)."""
++    import torch.distributed as dist
++
++    if dist.is_available() and dist.is_initialized():
++        dist.barrier()
++        dist.destroy_process_group()
++
++
++def _export_completed_checkpoint(
++    spec: TrainingJobSpec, checkpoint: Path, *, output_dir: Path, cache_dir: Path, report: ReportFn
++) -> None:
++    """Publish a weights-only copy of ``checkpoint`` and export it, without training."""
++    import torch
++
++    logger.info("Found the finished run's checkpoint %s; exporting it instead of training again", checkpoint)
++    report(0, "Exporting the checkpoint saved before the restart", {})
++    cache_dir.mkdir(parents=True, exist_ok=True)
++    state = torch.load(checkpoint, map_location="cpu", mmap=True, weights_only=False)
++    slim = {key: value for key, value in state.items() if key not in ("optimizer_states", "lr_schedulers")}
++    partial = cache_dir / f"{CHECKPOINT_NAME}.tmp"
++    torch.save(slim, partial)
++    del state, slim
++    partial.replace(cache_dir / CHECKPOINT_NAME)
++    _publish(cache_dir, output_dir)
++    export_policy = _export_policy(spec, output_dir)
++    _export(export_policy, output_dir, report, spec.export_backends)
++
++
++FULL_CHECKPOINT_DIR_ENV = "PHYSICALAI_FULL_CHECKPOINT_DIR"
++"""Where full checkpoints (with optimizer state) are kept instead of shipping them (set on Modal)."""
++
++
++def _offload_full_checkpoints(cache_dir: Path) -> None:
++    """Keep full checkpoints in ``PHYSICALAI_FULL_CHECKPOINT_DIR``; leave weights-only copies behind.
++
++    Junction 2026 station addition. The optimizer state is most of a checkpoint (about 20 of the
++    ~27 GB for pi0.5) and is only needed to continue the exact same run; Studio's "retrain from this
++    model" and export load weights with ``load_from_checkpoint``. On Modal the full file stays on the
++    Volume and only weights travel to the laptop. Without the environment variable nothing changes.
++    """
++    target = os.environ.get(FULL_CHECKPOINT_DIR_ENV)
++    if not target:
++        return
++    import torch
++
++    target_dir = Path(target)
++    for name in (CHECKPOINT_NAME, SNAPFLOW_CHECKPOINT_NAME):
++        checkpoint = cache_dir / name
++        if not checkpoint.is_file():
++            continue
++        state = torch.load(checkpoint, map_location="cpu", mmap=True, weights_only=False)
++        if not state.get("optimizer_states") and not state.get("lr_schedulers"):
++            continue
++        target_dir.mkdir(parents=True, exist_ok=True)
++        # Temporary name first: a restart treats a file under the final name as a finished run.
++        shutil.copy2(checkpoint, target_dir / f"{name}.tmp")
++        (target_dir / f"{name}.tmp").replace(target_dir / name)
++        slim = {key: value for key, value in state.items() if key not in ("optimizer_states", "lr_schedulers")}
++        partial = checkpoint.with_suffix(".slim.tmp")
++        torch.save(slim, partial)
++        del state, slim
++        partial.replace(checkpoint)
++        logger.info("Kept the full %s in %s; shipping weights only", name, target_dir)
++
++
+ def _ensure_checkpoint_exists(trainer: Any, cache_dir: Path) -> None:
+     """Save a final checkpoint only if the ``ModelCheckpoint`` callback did not already write one.
+ 
+diff --git a/application/backend/tests/schemas/test_job_response.py b/application/backend/tests/schemas/test_job_response.py
+index b38c35d5..ef8ee75f 100644
+--- a/application/backend/tests/schemas/test_job_response.py
++++ b/application/backend/tests/schemas/test_job_response.py
+@@ -13,7 +13,7 @@ from services.aws_auth_service import authentication_issue, operational_authenti
+ 
+ 
+ @pytest.mark.parametrize("status", list(JobStatus))
+-@pytest.mark.parametrize("modal_gpu", [None, "A10G", "A100-80GB", "H100"])
++@pytest.mark.parametrize("modal_gpu", [None, "A10G", "A100-80GB", "H100", "H100:2", "H100:4"])
+ def test_public_snapshot_preserves_storage_and_matches_http(status: JobStatus, modal_gpu: ModalGpu | None) -> None:
+     issue = authentication_issue(SSOTokenLoadError(error_msg="expired"), "studio")
+     assert issue is not None
+diff --git a/application/backend/tests/services/test_modal_training_backend.py b/application/backend/tests/services/test_modal_training_backend.py
+index 1609b665..c4466218 100644
+--- a/application/backend/tests/services/test_modal_training_backend.py
++++ b/application/backend/tests/services/test_modal_training_backend.py
+@@ -133,7 +133,8 @@ async def test_catalog_preparation_and_factory(connection, monkeypatch):
+     prepared = await RemoteTrainingTargetHandler(service).prepare(payload)
+     assert prepared.device is None
+     assert modal_connection_from_url(prepared.remote_trainer_url) == connection
+-    assert RemoteTrainingTargetHandler.target_key(prepared) == f"batch:{trainer.id}:act"
++    # Modal jobs are keyed per model name, so differently named jobs run side by side.
++    assert RemoteTrainingTargetHandler.target_key(prepared) == f"batch:{trainer.id}:act:model"
+     restored = TrainJobPayloadAdapter.validate_json(prepared.model_dump_json())
+     assert isinstance(await get_training_backend(restored), ModalTrainingBackend)
+     http.assert_not_called()
+@@ -286,6 +287,22 @@ async def test_per_job_gpu_uses_dynamic_function_and_is_persisted(context, resou
+     assert context.remote_job_id == CALL_ID
+ 
+ 
++@pytest.mark.asyncio
++@pytest.mark.parametrize(("gpu", "count"), [("H100:2", 2), ("A100-80GB:4", 4), ("H100:8", 8)])
++async def test_multi_gpu_job_scales_container_and_unpins_device(context, resources, connection, gpu, count):
++    function, volume, call, _ = resources
++    context.payload.modal_gpu = gpu
++    overridden = function.with_options.return_value
++    overridden.spawn.return_value = call
++    await ModalTrainingBackend(connection).train(context)
++    # No env=: Modal implements it as a secret, which would replace the HF_TOKEN secret.
++    function.with_options.assert_called_once_with(gpu=gpu, cpu=8 * count, memory=32768 * count)
++    overridden.spawn.assert_called_once_with(str(context.job.id))
++    uploader = volume.batch_upload.return_value.__enter__.return_value
++    spec = TrainingJobSpec.model_validate_json(uploader.put_file.call_args_list[1].args[0].getvalue())
++    assert spec.device_type == "cuda" and spec.device_index is None
++
++
+ @pytest.mark.asyncio
+ @pytest.mark.parametrize("gpu", [None, "H100"])
+ @pytest.mark.parametrize("has_deployment_secrets", [False, True])
+diff --git a/application/backend/src/training/multi_gpu.py b/application/backend/src/training/multi_gpu.py
+new file mode 100644
+index 00000000..600718f6
+--- /dev/null
++++ b/application/backend/src/training/multi_gpu.py
+@@ -0,0 +1,185 @@
++# Copyright (C) 2026 Intel Corporation
++# SPDX-License-Identifier: Apache-2.0
++
++"""Multi-GPU training: one fresh process per GPU, started with ``torchrun``.
++
++Junction 2026 station addition (see GPU_SCALING.md in the team repo). A training job that is given
++more than one GPU (``PHYSICALAI_NUM_GPUS`` > 1) is not trained in the calling process. Instead
++:func:`launch` starts ``torchrun``, which runs :func:`main` once per GPU; each of those calls the
++normal :func:`training.job.run_training_job`, and Lightning's DDP strategy sees that torchrun created
++the processes and launches nothing itself.
++
++Why not fork: forked ranks can't use CUDA once the parent process has touched it, and library code
++(model loading, Hugging Face) does that before training starts. Fresh processes avoid the problem.
++
++Only the calling process talks to the outside world: rank 0 writes progress lines to a file, and
++:func:`launch` forwards them to the caller's ``report`` (which, on Modal, writes ``status.json`` and
++commits the Volume).
++"""
++
++from __future__ import annotations
++
++import argparse
++import collections
++import json
++import os
++import subprocess
++import sys
++import threading
++import time
++from pathlib import Path
++from typing import TYPE_CHECKING, Any
++
++if TYPE_CHECKING:
++    from physicalai.train.callbacks import ReportFn, StopFn
++
++    from training.job import TrainingJobSpec
++
++_POLL_S = 2.0
++_TAIL_LINES = 60
++
++
++def under_torchrun() -> bool:
++    """True inside a process that torchrun started."""
++    return "TORCHELASTIC_RUN_ID" in os.environ or "LOCAL_RANK" in os.environ
++
++
++def launch(
++    spec: TrainingJobSpec,
++    *,
++    gpus: int,
++    dataset_root: Path | str,
++    output_dir: Path | str,
++    cache_dir: Path | str,
++    report: ReportFn,
++    should_stop: StopFn,
++) -> None:
++    """Run the training job on ``gpus`` GPUs with torchrun and wait for it.
++
++    Raises:
++        RuntimeError: If torchrun exits with an error (the last log lines are in the message).
++    """
++    cache_dir = Path(cache_dir)
++    # Outside cache_dir: rank 0 moves cache_dir to output_dir when training ends.
++    work_dir = cache_dir.parent / f"{cache_dir.name}.multi-gpu"
++    work_dir.mkdir(parents=True, exist_ok=True)
++    spec_path = work_dir / "spec.json"
++    progress_path = work_dir / "progress.jsonl"
++    # run_options can hold a token; the ranks read HF_TOKEN from the environment instead.
++    spec_path.write_text(spec.model_dump_json(exclude={"run_options"}))
++    progress_path.write_text("")
++
++    command = [
++        sys.executable, "-m", "torch.distributed.run",
++        "--standalone", f"--nproc_per_node={gpus}",
++        "-m", "training.multi_gpu",
++        "--spec", str(spec_path),
++        "--dataset", str(dataset_root),
++        "--output", str(output_dir),
++        "--cache", str(cache_dir),
++        "--progress", str(progress_path),
++    ]  # fmt: skip
++    print(f"Starting {gpus}-GPU training: {' '.join(command)}", flush=True)
++    process = subprocess.Popen(  # noqa: S603 - fixed command built above
++        command,
++        stdout=subprocess.PIPE,
++        stderr=subprocess.STDOUT,
++        text=True,
++        bufsize=1,
++        env=os.environ.copy(),
++    )
++
++    tail: collections.deque[str] = collections.deque(maxlen=_TAIL_LINES)
++
++    def echo_output() -> None:
++        assert process.stdout is not None
++        for line in process.stdout:
++            sys.stdout.write(line)
++            sys.stdout.flush()
++            tail.append(line.rstrip())
++
++    echo = threading.Thread(target=echo_output, name="torchrun-output", daemon=True)
++    echo.start()
++
++    offset = 0
++    stopped = False
++    while process.poll() is None:
++        offset = _forward_progress(progress_path, offset, report)
++        if not stopped and should_stop():
++            stopped = True
++            process.terminate()
++        time.sleep(_POLL_S)
++    echo.join(timeout=10)
++    _forward_progress(progress_path, offset, report)
++
++    if process.returncode != 0 and not stopped:
++        details = "\n".join(tail)
++        msg = f"Multi-GPU training failed (torchrun exit code {process.returncode}). Last output:\n{details}"
++        raise RuntimeError(msg)
++
++
++def _forward_progress(path: Path, offset: int, report: ReportFn) -> int:
++    """Pass every complete progress line written since ``offset`` to ``report``."""
++    try:
++        with path.open() as handle:
++            handle.seek(offset)
++            while True:
++                line = handle.readline()
++                if not line.endswith("\n"):
++                    break
++                offset = handle.tell()
++                try:
++                    item = json.loads(line)
++                except json.JSONDecodeError:
++                    continue
++                report(int(item.get("progress", 0)), item.get("message"), item.get("extra") or {})
++    except FileNotFoundError:
++        pass
++    return offset
++
++
++def main(argv: list[str] | None = None) -> None:
++    """One rank: run the normal training job; rank 0 writes progress lines for :func:`launch`."""
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--spec", required=True)
++    parser.add_argument("--dataset", required=True)
++    parser.add_argument("--output", required=True)
++    parser.add_argument("--cache", required=True)
++    parser.add_argument("--progress", required=True)
++    args = parser.parse_args(argv)
++
++    from training.job import TrainingJobSpec, run_training_job
++
++    spec = TrainingJobSpec.model_validate_json(Path(args.spec).read_text())
++    rank = int(os.environ.get("RANK", "0"))
++    progress_path = Path(args.progress)
++
++    def report(progress: int, message: str | None, extra: dict[str, Any]) -> None:
++        if rank != 0:
++            return
++        line = json.dumps({"progress": progress, "message": message, "extra": extra}, default=str)
++        with progress_path.open("a") as handle:
++            handle.write(line + "\n")
++
++    def never_stop() -> bool:
++        # Cancelling a Modal job stops the whole container; a per-rank stop could make ranks diverge.
++        return False
++
++    run_training_job(
++        spec,
++        dataset_root=args.dataset,
++        output_dir=args.output,
++        cache_dir=args.cache,
++        report=report,
++        should_stop=never_stop,
++    )
++    # Done (rank 0 has published and exported; the others returned after training). Exit at once:
++    # interpreter shutdown (NCCL teardown, worker threads) is where the 8-GPU run hung on 2026-11-14,
++    # and torchrun only returns when every rank has exited.
++    sys.stdout.flush()
++    sys.stderr.flush()
++    os._exit(0)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/application/backend/tests/training/test_offload_full_checkpoint.py b/application/backend/tests/training/test_offload_full_checkpoint.py
+new file mode 100644
+index 00000000..b3c50a25
+--- /dev/null
++++ b/application/backend/tests/training/test_offload_full_checkpoint.py
+@@ -0,0 +1,50 @@
++# Copyright (C) 2026 Intel Corporation
++# SPDX-License-Identifier: Apache-2.0
++
++"""Full checkpoints stay where PHYSICALAI_FULL_CHECKPOINT_DIR points; weights-only copies ship."""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++import torch
++
++from training import job
++
++
++def _write_checkpoint(path: Path) -> dict:
++    state = {
++        "global_step": 7,
++        "state_dict": {"layer.weight": torch.ones(4, 4)},
++        "optimizer_states": [{"state": {0: {"exp_avg": torch.zeros(4, 4)}}}],
++        "lr_schedulers": [{"last_epoch": 7}],
++        "hyper_parameters": {"width": 4},
++    }
++    torch.save(state, path)
++    return state
++
++
++def test_without_target_nothing_changes(tmp_path: Path, monkeypatch) -> None:
++    monkeypatch.delenv(job.FULL_CHECKPOINT_DIR_ENV, raising=False)
++    checkpoint = tmp_path / job.CHECKPOINT_NAME
++    _write_checkpoint(checkpoint)
++    before = checkpoint.read_bytes()
++    job._offload_full_checkpoints(tmp_path)
++    assert checkpoint.read_bytes() == before
++
++
++def test_full_checkpoint_kept_and_weights_shipped(tmp_path: Path, monkeypatch) -> None:
++    cache_dir, keep_dir = tmp_path / "cache", tmp_path / "keep"
++    cache_dir.mkdir()
++    monkeypatch.setenv(job.FULL_CHECKPOINT_DIR_ENV, str(keep_dir))
++    _write_checkpoint(cache_dir / job.CHECKPOINT_NAME)
++
++    job._offload_full_checkpoints(cache_dir)
++
++    full = torch.load(keep_dir / job.CHECKPOINT_NAME, weights_only=False)
++    slim = torch.load(cache_dir / job.CHECKPOINT_NAME, weights_only=False)
++    assert full["optimizer_states"] and full["lr_schedulers"]
++    assert "optimizer_states" not in slim and "lr_schedulers" not in slim
++    assert slim["global_step"] == 7
++    assert torch.equal(slim["state_dict"]["layer.weight"], torch.ones(4, 4))
++    assert not list(cache_dir.glob("*.tmp"))
+diff --git a/application/backend/tests/training/test_restart_export.py b/application/backend/tests/training/test_restart_export.py
+new file mode 100644
+index 00000000..f309f2f2
+--- /dev/null
++++ b/application/backend/tests/training/test_restart_export.py
+@@ -0,0 +1,55 @@
++# Copyright (C) 2026 Intel Corporation
++# SPDX-License-Identifier: Apache-2.0
++
++"""A restarted job whose full checkpoint already exists exports it instead of training again."""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++import pytest
++import torch
++
++from training import job
++from training.job import TrainingJobSpec
++
++
++def _full_checkpoint(path: Path) -> None:
++    torch.save(
++        {
++            "global_step": 42,
++            "state_dict": {"layer.weight": torch.ones(2, 2)},
++            "optimizer_states": [{"state": {}}],
++            "lr_schedulers": [{"last_epoch": 42}],
++            "hyper_parameters": {"width": 2},
++        },
++        path,
++    )
++
++
++def test_restart_exports_saved_checkpoint_without_training(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    saved = tmp_path / "volume" / "full-checkpoint" / "model.ckpt"
++    saved.parent.mkdir(parents=True)
++    _full_checkpoint(saved)
++    monkeypatch.setenv(job.COMPLETED_CHECKPOINT_ENV, str(saved))
++    exported: list[Path] = []
++    monkeypatch.setattr(job, "_export_policy", lambda spec, output_dir: ("policy", output_dir))
++    monkeypatch.setattr(job, "_export", lambda policy, output_dir, report, backends: exported.append(output_dir))
++    monkeypatch.setattr(
++        "training.multi_gpu.launch", lambda *a, **k: pytest.fail("must not launch training on a restart")
++    )
++
++    output_dir, cache_dir = tmp_path / "model", tmp_path / "cache"
++    job.run_training_job(
++        TrainingJobSpec(policy="act", max_epochs=1),
++        dataset_root=tmp_path / "dataset",
++        output_dir=output_dir,
++        cache_dir=cache_dir,
++        report=lambda *a: None,
++        should_stop=lambda: False,
++    )
++
++    shipped = torch.load(output_dir / job.CHECKPOINT_NAME, weights_only=False)
++    assert "optimizer_states" not in shipped and shipped["global_step"] == 42
++    assert exported == [output_dir]
++    assert saved.is_file()  # the full checkpoint on the Volume is left alone
