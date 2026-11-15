@@ -92,9 +92,15 @@ The buttons along the bottom do the same, and `Ctrl+C` in the terminal always st
    87% of the recorded picks and 90% of the sorts in `main-clean2` end; the rule fired too early
    on only 3 of 158 picks. Timeout: 25 s, after which the loop stops and waits for `r`.
 2. **SHOW.** A scripted, eased move to the saved show pose.
-3. **INSPECT.** The wrist stops at 0°, 90° and 180° (`show.stops_deg` in `cell_config.json`).
-   - **Turn direction:** all stops turn the same way, the way with room. From a wrist angle
-     near 0 the 180° stop is capped by the joint's range (about 171° from −2.7).
+3. **INSPECT.** The wrist turns to each stop in `show.stops_deg` in `cell_config.json`. It is
+   now only **90°**: at the show pose the camera looks along the jaws, so at 0° and 180° a gripper
+   finger hides the middle of the brick. At 90° the fingers are above and below it and one
+   ungripped face is in full view. The other ungripped face and the two gripped faces aren't
+   checked, so mark defective bricks on both ungripped faces.
+   - **Turn direction:** all stops turn the same way, the way with room. From the show pose's
+     wrist angle (7) a lone 90° stop turns up to +60. With 180° in the list, every stop turns the
+     other way and the 180° stop is capped by the joint's range.
+   - Lists such as `[0, 90, 180, 90, 0]` (out and back) still work.
    - **Score per stop:** 3 fresh frames, scored on the GPU while the wrist turns to the next
      stop. The stop's score is their median, so one glitchy frame can't decide.
    - **Decision:**

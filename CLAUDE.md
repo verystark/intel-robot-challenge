@@ -179,8 +179,9 @@ running, restart the backend: Ctrl+C, wait about 30 s, then start it again.
 - **Show and inspect are scripted** with `Arm.move_to`: eased, speed-limited, lag-checked moves
   to `poses.json`. `send_action` jumps straight to the target, so never send far targets
   directly.
-  - Inspection stops at the wrist angles in `show.stops_deg` (0/90/180). `arm.plan_stops`
-    caps them at the joint range; `show_tool.py collect` uses the same plan, so training
+  - Inspection stops at the wrist angles in `show.stops_deg`, now only `[90]`: at 0° and 180°
+    a gripper finger hides the brick. `run_cell.py` turns to the first stop when it isn't 0°.
+    `arm.plan_stops` caps the stops at the joint range; `show_tool.py collect` uses the same plan, so training
     photos match.
   - Each stop's score is the median of 3 frames. A defective stop rejects at once; unsure
     stops get one second look.

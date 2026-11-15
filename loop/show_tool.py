@@ -23,9 +23,9 @@ run `save --name home`. Without it, run_cell.py uses the median start of the sor
 Collect mode: the tool moves to the show pose and opens the gripper. Put a brick between the
 jaws, gripped the way the robot grips it, then type g (good, training), t (good, test only) or
 b (defective) and Enter. The tool closes the gripper and takes one photo at every wrist stop of
-cell_config.json (0, 90, 180, then back through 90 to 0 deg, as far as the wrist's range allows,
-planned exactly as run_cell.py plans them), then opens the gripper. Anomalib must have seen every
-stop in training, or that view scores as defective. Photos go to anomaly/dataset/<folder>
+cell_config.json show.stops_deg (now only 90 deg, as far as the wrist's range allows, planned
+exactly as run_cell.py plans them), then opens the gripper. Anomalib must have seen every stop in
+training, or that view scores as defective, so collect again after changing the stops. Photos go to anomaly/dataset/<folder>
 (crop, named ..._a<degrees>.png, ..._a<degrees>b.png on the way back) and anomaly/dataset_full/<folder> (full frame), like
 capture.py, so recrop.py works. Close capture.py and inspect_live.py first: one program per camera.
 """

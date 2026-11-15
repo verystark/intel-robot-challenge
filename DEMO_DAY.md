@@ -31,7 +31,7 @@ decision and timing.
 PERCEIVE                DETECT                  REASON                   ACT                     OPTIMIZE
 top RealSense  ─┐       inspection webcam ──▶   verdict ──▶ sentence ──▶ SmolVLA sort           OpenVINO everywhere
 wrist camera   ─┴──▶ pick policy (SmolVLA      PatchCore score +        "…defective. Put it      device per model by
-                     or ACT) ──▶ SO-101         heatmap, 3 stops         on the orange plate."    measurement, INT8,
+                     or ACT) ──▶ SO-101         heatmap at 90° stop      on the orange plate."    measurement, INT8,
                      picks the brick            (GPU, while the arm      ──▶ SO-101 sorts         zero-noise SmolVLA,
                      scripted show pose ──▶     turns the brick)                                  async chunks
 ```
@@ -58,7 +58,7 @@ which one counts; the design covers both.
 | Criterion (PDF) | Pts | What we show | Evidence |
 |---|---|---|---|
 | End-to-end physical AI solution | 25 | One program runs pick → inspect → sort in a loop. Nobody chooses anything. | Live run; `loop/runs/*/cycles.jsonl` |
-| Defect detection with Anomalib | 20 | PatchCore at three wrist stops per brick (median of 3 frames each), a heatmap, three score bands, early reject and a second look. The verdict reaches the robot as the sentence. | The screen: photos, heatmaps, score bar, the sentence sent |
+| Defect detection with Anomalib | 20 | PatchCore at a 90° wrist stop, the view no gripper finger blocks (median of 3 frames), a heatmap, three score bands, early reject and a second look. The verdict reaches the robot as the sentence. | The screen: photos, heatmaps, score bar, the sentence sent |
 | VLA & Physical AI Studio | 20 | SmolVLA trained in Studio on our teleop data. One model, three sentences; the verdict changes what it is told. | Studio datasets and models; the sentence on screen |
 | OpenVINO & Core Ultra | 20 | Every model in OpenVINO. Device chosen by measurement. INT8 Anomalib (4× smaller). Anomalib trained on the Intel GPU (Intel GPU 2.7 min vs CPU 12–17 min for the slowest step). | `bench/RESULTS.md` |
 | Robotic execution & reliability | 10 | Recovery from uncertain detections: unsure stops get a second look → reject if still unsure. Stage timeouts; a stop key. | Re-check count on the screen and in the log |

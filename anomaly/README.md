@@ -15,7 +15,7 @@ cameras      Anomalib    VLA policy  SO-101      OpenVINO
 | `capture.py` | Shows the webcam with a green box and saves the area inside it as a photo into `dataset/` |
 | `camera.py` | Opens the inspection camera, locks its settings and crops the box. Shared by capture and live inspection |
 | `camera_config.json` | Written by `capture.py`: camera, box position/size and locked settings. Live inspection reads it |
-| `recrop.py` | Re-cuts all photos from `dataset_full/` with the current box (after moving or resizing it). Backs up the old crops in `dataset_old_crops/` |
+| `recrop.py` | Re-cuts all photos from `dataset_full/` with the current box (after moving or resizing it). Backs up the old crops in `dataset_old_crops/`. `--dataset dataset_show` re-cuts the photos from `show_tool.py collect` |
 | `old_setup/` | The first 475 good photos (03:47–04:16 on 2026-11-14), taken with the arm reaching down from above in front of a different backdrop. They don't match the current showing pose, so they are kept out of `dataset/` and not trained on |
 | `train_export.py` | Trains a PatchCore model on the photos, tests it, and exports it to OpenVINO in `exported_model/` |
 | `inspect_live.py` | Live test of the trained model: show a brick to the camera, see GOOD / UNSURE / DEFECTIVE, the anomaly score, a heatmap and the time per check |
