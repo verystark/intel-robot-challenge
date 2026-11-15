@@ -62,12 +62,28 @@ def find_brick(crop_bgr: np.ndarray) -> tuple[float, float, str]:
     kernel = np.ones((5, 5), np.uint8)
     red = cv2.morphologyEx(red.astype(np.uint8), cv2.MORPH_OPEN, kernel)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(red)
-    # The fingers are chunky blobs; a long thin red strip is the table edge, which shows up
-    # reddish along the bottom of the crop when the arm sits low.
-    fingers = [i for i in range(1, n) if stats[i, cv2.CC_STAT_AREA] > 0.01 * w * h
-               and stats[i, cv2.CC_STAT_WIDTH] <= 5 * stats[i, cv2.CC_STAT_HEIGHT]]
-    if not fingers:
+    # The fingers are chunky blobs. A long thin red strip is the table edge, which shows up
+    # reddish along the bottom of the crop; red bricks lying on the table can break it into
+    # shorter pieces. So: the biggest chunky blob is a finger, and only blobs close to it count
+    # as the other finger.
+    def chunky_blob(i: int) -> bool:
+        bw, bh = stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT]
+        flat = bh < 0.09 * h and bw > 3 * bh  # 121 of 122 such blobs in the photos are the table edge
+        return stats[i, cv2.CC_STAT_AREA] > 0.01 * w * h and bw <= 5 * bh and not flat
+
+    chunky = [i for i in range(1, n) if chunky_blob(i)]
+    if not chunky:
         return w / 2, h / 2, "none"
+    anchor = max(chunky, key=lambda i: stats[i, cv2.CC_STAT_AREA])
+    ax, ay, aw, ah = stats[anchor, :4]
+
+    def near_anchor(i: int) -> bool:
+        bx, by, bw, bh = stats[i, :4]
+        gap_x = max(bx - (ax + aw), ax - (bx + bw), 0)
+        gap_y = max(by - (ay + ah), ay - (by + bh), 0)
+        return gap_x <= 0.15 * w and gap_y <= 0.15 * h
+
+    fingers = [i for i in chunky if near_anchor(i)]
     ys, xs = np.nonzero(np.isin(labels, fingers))
     tip_x = float(np.percentile(xs, 0.5))  # the fingers point left at the show pose
     tip_y = float(np.median(ys[xs < tip_x + 0.08 * w]))

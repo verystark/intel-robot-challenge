@@ -172,6 +172,17 @@ Train and calibrate:
 
 Check the squares when adding photos: a take where the brick fell out goes in `dataset_show/excluded/`.
 
+Result (2026-11-14 21:49, 641 good / 42 test / 46 defective photos, of which 72 / 20 / 21 at the
+show pose; coreset 0.02, 5 min on the GPU, ~20 ms per photo):
+
+| ±90° photos, the loop's stops | Scores | Verdict (GOOD < 0.35, DEFECTIVE > 0.58) |
+|---|---|---|
+| Good bricks from loop runs (6) | 0.08–0.25 | 6 GOOD |
+| Good bricks from `collect` (8) | 0.04–0.49 | 7 GOOD, 1 UNSURE |
+| Defective bricks (14) | 0.59–1.00 | 14 DEFECTIVE |
+
+The old 0° photos are weaker (3 of 6 good ones unsure), but the loop no longer stops at 0°.
+
 ## Status
 
 Done:

@@ -141,5 +141,6 @@
    "label": "excluded",
    "why": "the only 90-degree view"
   }
- }
+ },
+ "note_2026-11-14_21h": "show_tool collect photos at the +90/-90 stops: normal_/abnormal_ by key; the takes without a brick (21:23:04, 21:25:05, 21:25:12) are in excluded/; two good takes (21:24:40 blue, 21:25:20 light green) moved to test_normal. live_run*.png in test_normal = loop photos of clean bricks gripped by the policy (flat faces at the stops)."
 }

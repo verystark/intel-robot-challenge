@@ -1,9 +1,9 @@
 {
-  "low": 0.5117,
-  "high": 0.831,
-  "source": "calibrated from 6 test_normal and 7 abnormal photos",
+  "low": 0.45,
+  "high": 0.56,
+  "source": "set by hand",
   "device": "GPU",
   "model": "/home/intel/intel-robot-challenge/anomaly/exported_model/weights/openvino/model.xml",
-  "model_time": "2026-11-14 21:01:50",
-  "written": "2026-11-14 21:02:55"
+  "model_time": "2026-11-14 21:48:44",
+  "written": "2026-11-14 22:23:22"
 }
