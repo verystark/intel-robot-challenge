@@ -4,9 +4,10 @@ Each cycle:
   0. HOME     If the arm isn't at the home pose, a scripted move there (the pick episodes start there).
   1. PICK     The pick policy, "Pick up the brick.", until the arm has gone out, come back and held still.
   2. SHOW     Scripted: smooth move to the saved show pose (loop/poses.json).
-  3. INSPECT  Photos at the wrist stops of cell_config.json show.stops_deg (now only 90 deg: at 0 and
-              180 deg a gripper finger hides the brick; out-and-back lists such as 0, 90, 180, 90, 0
-              also work), 3 frames each; a stop's score is the median of its frames. Each stop is
+  3. INSPECT  Photos at the wrist stops of cell_config.json show.stops_deg, now 90 then -90 deg: the
+              two faces no gripper finger covers (at 0 and 180 deg a finger hides the brick). Then
+              the wrist turns back to the show pose. Out-and-back lists such as 0, 90, 180, 90, 0
+              also work. 3 frames per stop; a stop's score is the median of its frames. Each stop is
               scored on the GPU while the wrist turns to the next. Any stop clearly defective -> DEFECTIVE at once; all clearly
               good -> GOOD; otherwise a second look at the unsure stops; still unsure -> DEFECTIVE.
   4. HOME     Scripted move back to the home pose, where the sort episodes start.
@@ -443,7 +444,8 @@ class Cell:
         ms = [o[2] for o in out]
         self.all_anomaly_ms.extend(ms)
         entry.update(scores=scores, median=median, label=label(median, self.bands), ms=ms)
-        self.ev(3, f"INSP.{entry['stop'].tag.upper()}DEG",
+        stop = entry["stop"]
+        self.ev(3, f"INSP.{stop.deg:.0f}DEG" + (".BACK" if stop.back else ""),
                 f"Score {median:.2f} (median of {len(scores)}) → {entry['label']}")
         crop = entry["crops"][i]
         photos[entry["index"]] = Photo(crop=crop, heat_overlay=heatmap_overlay(crop, out[i][1]), score=median,
@@ -454,8 +456,9 @@ class Cell:
         return entry["label"]
 
     def show_and_inspect(self) -> tuple[str, list[Photo], dict]:
-        """Show pose, then photos at each stop of show.stops_deg (now [90]; the first stop is turned to
-        when it isn't the show pose's own angle).
+        """Show pose, then photos at each stop of show.stops_deg (now [90, -90]: out to one face, across
+        to the other, then back to the show pose; the first stop is turned to when it isn't the show
+        pose's own angle).
 
         Each stop's frames are scored on the anomaly device while the wrist turns to the next
         stop. Any stop clearly defective -> DEFECTIVE at once (the remaining stops are skipped).
@@ -505,7 +508,7 @@ class Cell:
                     self.ev(3, "INSP", f"Defect at {entries[k - 1]['stop'].deg:.0f}° · remaining views skipped")
                     break
             elif abs(stop.roll - float(show[WRIST_ROLL])) > 0.5:
-                # The first stop isn't the show pose's own angle (e.g. stops_deg [90]): turn to it
+                # The first stop isn't the show pose's own angle (e.g. stops_deg [90, -90]): turn to it
                 # first, as show_tool.py collect does, or the photo would be of the 0 deg view.
                 self.arm.move_to(at(stop), speed=speed)
             say_stop(k, stop)

@@ -92,15 +92,19 @@ The buttons along the bottom do the same, and `Ctrl+C` in the terminal always st
    87% of the recorded picks and 90% of the sorts in `main-clean2` end; the rule fired too early
    on only 3 of 158 picks. Timeout: 25 s, after which the loop stops and waits for `r`.
 2. **SHOW.** A scripted, eased move to the saved show pose.
-3. **INSPECT.** The wrist turns to each stop in `show.stops_deg` in `cell_config.json`. It is
-   now only **90°**: at the show pose the camera looks along the jaws, so at 0° and 180° a gripper
-   finger hides the middle of the brick. At 90° the fingers are above and below it and one
-   ungripped face is in full view. The other ungripped face and the two gripped faces aren't
-   checked, so mark defective bricks on both ungripped faces.
-   - **Turn direction:** all stops turn the same way, the way with room. From the show pose's
-     wrist angle (7) a lone 90° stop turns up to +60. With 180° in the list, every stop turns the
-     other way and the 180° stop is capped by the joint's range.
-   - Lists such as `[0, 90, 180, 90, 0]` (out and back) still work.
+3. **INSPECT.** The wrist turns to each stop in `show.stops_deg` in `cell_config.json`, in order.
+   It is now **`[90, -90]`**: out to +90°, across to −90°, then back to the show pose. At the
+   show pose the camera looks along the jaws, so at 0° and 180° a gripper finger hides the middle
+   of the brick. At ±90° the fingers are above and below it, so the two ungripped faces are in
+   full view, one at each stop. The two gripped faces aren't checked.
+   - **Turn direction:** positive angles turn the way with room for the largest of them, and
+     negative angles the other way. From the show pose's wrist angle (7), +90° turns to +60 and
+     −90° to −46. If a list doesn't fit either way, the stops are capped by the joint's range
+     (e.g. 180° becomes about 178°).
+   - Lists such as `[0, 90, 180, 90, 0]` (out and back through the same angles) also work.
+   - **Training photos:** Anomalib must have seen both views. Collect with
+     `show_tool.py collect --dataset anomaly/dataset_show`, which photographs every stop of the
+     same plan, then train on `dataset_show`.
    - **Score per stop:** 3 fresh frames, scored on the GPU while the wrist turns to the next
      stop. The stop's score is their median, so one glitchy frame can't decide.
    - **Decision:**

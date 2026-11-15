@@ -266,7 +266,7 @@ function inspection(s) {
   marks.forEach((m, i) => {
     const px = X(m.score);
     o += `<polygon points="${px},${yb + 10} ${px - 5},${yb + 18} ${px + 5},${yb + 18}" fill="${css("--text")}"/>`;
-    o += T(px, yb - 6 - (i % 2) * 0, deg(m.name), { size: 9, anchor: "middle", mono: true });
+    o += T(px, yb - 6 - (i % 2) * 0, deg(m.name).replace(" back", "↩"), { size: 9, anchor: "middle", mono: true });
   });
   if (s.live && s.live.age_s < 1.5 && ["SHOW", "INSPECT"].includes(s.stage)) {
     const px = X(s.live.score);
@@ -274,7 +274,7 @@ function inspection(s) {
   }
   svg.innerHTML = o;
 
-  const planned = s.stops_planned.length ? s.stops_planned : ["0 deg", "90 deg", "180 deg", "90 deg back", "0 deg back"];
+  const planned = s.stops_planned.length ? s.stops_planned : ["90 deg", "-90 deg"];
   $("stops").innerHTML = planned.map((name, i) => {
     const st = s.stops[i];
     if (!st) {

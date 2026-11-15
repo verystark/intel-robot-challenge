@@ -23,10 +23,10 @@ run `save --name home`. Without it, run_cell.py uses the median start of the sor
 Collect mode: the tool moves to the show pose and opens the gripper. Put a brick between the
 jaws, gripped the way the robot grips it, then type g (good, training), t (good, test only) or
 b (defective) and Enter. The tool closes the gripper and takes one photo at every wrist stop of
-cell_config.json show.stops_deg (now only 90 deg, as far as the wrist's range allows, planned
-exactly as run_cell.py plans them), then opens the gripper. Anomalib must have seen every stop in
+cell_config.json show.stops_deg (now 90 and -90 deg, the two faces no gripper finger covers, as
+far as the wrist's range allows, planned exactly as run_cell.py plans them), then opens the gripper. Anomalib must have seen every stop in
 training, or that view scores as defective, so collect again after changing the stops. Photos go to anomaly/dataset/<folder>
-(crop, named ..._a<degrees>.png, ..._a<degrees>b.png on the way back) and anomaly/dataset_full/<folder> (full frame), like
+(crop, named ..._a90.png, ..._a-90.png; ..._a<degrees>b.png on a way back) and anomaly/dataset_full/<folder> (full frame), like
 capture.py, so recrop.py works. Close capture.py and inspect_live.py first: one program per camera.
 """
 
@@ -181,7 +181,9 @@ def cmd_test_turn(args) -> None:
     try:
         goto(arm, poses["show"])
         show = arm.last_command.copy()  # commanded, not measured: keeps any squeeze on a brick
-        for stop in plan_stops(float(show[WRIST_ROLL]), stops_from_config(), per_deg)[1:]:
+        for stop in plan_stops(float(show[WRIST_ROLL]), stops_from_config(), per_deg):
+            if abs(stop.roll - float(show[WRIST_ROLL])) <= 0.5:
+                continue  # the show pose's own angle: already there
             target = show.copy()
             target[WRIST_ROLL] = stop.roll
             try:

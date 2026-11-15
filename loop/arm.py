@@ -100,8 +100,9 @@ def roll_target(current_roll: float, degrees: float, units_per_deg: float) -> fl
 class Stop:
     """One inspection stop: the angle asked for, the angle the wrist can really reach, its roll target.
 
-    `back` marks a stop on the return sweep (an angle after a larger one), e.g. the second 90 in
-    0, 90, 180, 90, 0. It has the same roll target as its forward twin but its own name.
+    `deg` keeps the sign of the angle asked for: -90 is the opposite turn from 90. `back` marks a
+    stop on a return sweep (an angle after a larger one), e.g. the second 90 in 0, 90, 180, 90, 0.
+    It has the same roll target as its forward twin but its own name.
     """
 
     asked_deg: float
@@ -116,32 +117,35 @@ class Stop:
 
     @property
     def tag(self) -> str:
-        """Short id for event tags and file names, e.g. 90 or 90b."""
+        """Short id for file names, e.g. 90, -90 or 90b."""
         return f"{self.deg:.0f}" + ("b" if self.back else "")
 
 
 def plan_stops(show_roll: float, stops_deg: list[float], units_per_deg: float, margin: float = 2.0) -> list[Stop]:
-    """Wrist-roll targets for the inspection stops, all turned the same way from the show pose.
+    """Wrist-roll targets for the inspection stops, visited in the order given.
 
-    The stops are visited in the order given, so [0, 90, 180, 90, 0] turns out and rolls back
-    again, photographing on the way back too. The direction is the one with room for the largest stop; if neither has room (a show pose
-    with wrist_roll near 0 can't turn a full 180 deg either way), the largest stops are capped
-    at the joint's range, e.g. about 173 deg from a roll of -2. run_cell.py and show_tool.py's
-    collect mode both use this, so training photos and live photos come from the same angles.
+    Positive angles turn one way from the show pose and negative angles the other way, so
+    [90, -90] rolls out to one face the gripper fingers don't cover, back across to the opposite
+    face, and run_cell.py then turns back to the show pose. [0, 90, 180, 90, 0] turns out and
+    rolls back through the same angles. Positive angles go the way with room for the largest of
+    them (negative angles the opposite way). If neither way fits everything (a show pose with
+    wrist_roll near 0 can't turn a full 180 deg either way), the way that caps least is used and
+    the stops are capped at the joint's range, e.g. about 173 deg from a roll of -2.
+    run_cell.py and show_tool.py's collect mode both use this, so training photos and live
+    photos come from the same angles.
     """
     lo, hi = -100 + margin, 100 - margin
-    need = max(abs(d) for d in stops_deg) * units_per_deg
+    pos = max((d for d in stops_deg if d > 0), default=0.0) * units_per_deg
+    neg = max((-d for d in stops_deg if d < 0), default=0.0) * units_per_deg
     room_up, room_down = hi - show_roll, show_roll - lo
-    if room_up >= need:
-        sign = 1
-    elif room_down >= need:
-        sign = -1
-    else:
-        sign = 1 if room_up >= room_down else -1
+    short_up = max(0.0, pos - room_up) + max(0.0, neg - room_down)  # how much would be capped
+    short_down = max(0.0, pos - room_down) + max(0.0, neg - room_up)
+    sign = 1 if short_up <= short_down else -1
     stops, furthest = [], 0.0
     for asked in stops_deg:
-        roll = float(np.clip(show_roll + sign * abs(asked) * units_per_deg, lo, hi))
-        stops.append(Stop(asked, abs(roll - show_roll) / units_per_deg, roll, back=abs(asked) < furthest))
+        roll = float(np.clip(show_roll + sign * asked * units_per_deg, lo, hi))
+        deg = (roll - show_roll) * sign / units_per_deg + 0.0  # + 0.0: no "-0 deg"
+        stops.append(Stop(asked, deg, roll, back=abs(asked) < furthest))
         furthest = max(furthest, abs(asked))
     return stops
 

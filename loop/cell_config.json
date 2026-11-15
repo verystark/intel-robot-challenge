@@ -16,9 +16,9 @@
     "GOOD": "The brick is good. Put it on the green plate.",
     "DEFECTIVE": "The brick is defective. Put it on the orange plate."
   },
-  "pick": {"timeout_s": 40, "min_time_s": 1.5, "moved_away": 40, "still_speed": 15, "hold_s": 0.5, "return_tol": 45},
+  "pick": {"timeout_s": 20, "min_time_s": 1.5, "moved_away": 40, "still_speed": 15, "hold_s": 0.5, "return_tol": 45},
   "sort": {"timeout_s": 15, "min_time_s": 1.0, "moved_away": 40, "still_speed": 15, "hold_s": 0.5, "return_tol": 45},
-  "show": {"stops_deg": [90], "frames_per_stop": 3, "speed": 50, "turn_speed": 90, "settle_s": 0.35},
+  "show": {"stops_deg": [90, -90], "frames_per_stop": 3, "speed": 50, "turn_speed": 90, "settle_s": 0.35},
   "home_tol": 8,
   "grip_closed": 2.5,
   "cameras": {

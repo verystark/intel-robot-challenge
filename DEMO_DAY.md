@@ -14,8 +14,9 @@ loop logs. Quote that file, not this one.
 ## 1. The system in one paragraph
 
 An SO-101 arm picks a Duplo brick with a vision-language-action policy trained in Physical AI
-Studio. A script then holds the brick in front of an inspection webcam and turns it through three
-wrist stops (0°, 90°, 180°). Anomalib (PatchCore) scores each stop and draws a heatmap; a clear
+Studio. A script then holds the brick in front of an inspection webcam and rolls the wrist to
++90° and −90°, the two faces no gripper finger covers, then back. Anomalib (PatchCore) scores
+each stop and draws a heatmap; a clear
 defect at any stop rejects the brick at once. The verdict becomes the
 sentence the VLA is given next: *"The brick is good. Put it on the green plate."* or *"The brick
 is defective. Put it on the orange plate."* The VLA puts the brick on that plate.
@@ -31,7 +32,7 @@ decision and timing.
 PERCEIVE                DETECT                  REASON                   ACT                     OPTIMIZE
 top RealSense  ─┐       inspection webcam ──▶   verdict ──▶ sentence ──▶ SmolVLA sort           OpenVINO everywhere
 wrist camera   ─┴──▶ pick policy (SmolVLA      PatchCore score +        "…defective. Put it      device per model by
-                     or ACT) ──▶ SO-101         heatmap at 90° stop      on the orange plate."    measurement, INT8,
+                     or ACT) ──▶ SO-101         heatmap at ±90° stops    on the orange plate."    measurement, INT8,
                      picks the brick            (GPU, while the arm      ──▶ SO-101 sorts         zero-noise SmolVLA,
                      scripted show pose ──▶     turns the brick)                                  async chunks
 ```
@@ -39,7 +40,7 @@ wrist camera   ─┴──▶ pick policy (SmolVLA      PatchCore score +      
 | Stage | What runs | Where | Why there |
 |---|---|---|---|
 | Pick | SmolVLA `Pick up the brick.` (or ACT, `--pick-model latest:act`) | GPU (ACT: NPU) | SmolVLA needs the GPU: 214 ms per chunk, it won't compile for the NPU, and the CPU takes 4.8 s. ACT runs as fast on the NPU (17 ms) as on the GPU (15 ms). |
-| Show | Scripted, eased joint move to a saved pose; wrist stops at 0°, 90°, 180°; then home, grip kept | CPU | The photo must be taken from the same pose every time. Anomalib flags anything that differs from its training photos (`ANOMALY_DATA_REVIEW.md`). |
+| Show | Scripted, eased joint move to a saved pose; wrist stops at +90° and −90°, then back; then home, grip kept | CPU | The photo must be taken from the same pose every time. Anomalib flags anything that differs from its training photos (`ANOMALY_DATA_REVIEW.md`). |
 | Inspect | Anomalib PatchCore, heatmap, good / unsure / defective bands | GPU | 18 ms per photo vs 184 ms on the NPU and 56 ms on the CPU. Its scores are also closest to FP32 on the CPU. The GPU is free then: no policy runs while the brick is shown. |
 | Sort | The same SmolVLA, with the verdict in the sentence | GPU | The VLA reads the verdict. The sentence is the "structured signal" the brief asks for. |
 | Measure | `bench/sysmon.py`: temperature, CPU / GPU / NPU busy, power | – | Judges want evidence. |
@@ -58,7 +59,7 @@ which one counts; the design covers both.
 | Criterion (PDF) | Pts | What we show | Evidence |
 |---|---|---|---|
 | End-to-end physical AI solution | 25 | One program runs pick → inspect → sort in a loop. Nobody chooses anything. | Live run; `loop/runs/*/cycles.jsonl` |
-| Defect detection with Anomalib | 20 | PatchCore at a 90° wrist stop, the view no gripper finger blocks (median of 3 frames), a heatmap, three score bands, early reject and a second look. The verdict reaches the robot as the sentence. | The screen: photos, heatmaps, score bar, the sentence sent |
+| Defect detection with Anomalib | 20 | PatchCore at +90° and −90° wrist stops, the two faces no gripper finger blocks (median of 3 frames each), a heatmap, three score bands, early reject and a second look. The verdict reaches the robot as the sentence. | The screen: photos, heatmaps, score bar, the sentence sent |
 | VLA & Physical AI Studio | 20 | SmolVLA trained in Studio on our teleop data. One model, three sentences; the verdict changes what it is told. | Studio datasets and models; the sentence on screen |
 | OpenVINO & Core Ultra | 20 | Every model in OpenVINO. Device chosen by measurement. INT8 Anomalib (4× smaller). Anomalib trained on the Intel GPU (Intel GPU 2.7 min vs CPU 12–17 min for the slowest step). | `bench/RESULTS.md` |
 | Robotic execution & reliability | 10 | Recovery from uncertain detections: unsure stops get a second look → reject if still unsure. Stage timeouts; a stop key. | Re-check count on the screen and in the log |
