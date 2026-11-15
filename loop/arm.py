@@ -152,6 +152,7 @@ class Arm:
     last_command: np.ndarray | None = None
     moving: bool = False  # True during a scripted move (the dashboard shows it)
     on_joints: object = None  # optional callback(joints) for the dashboard's joint trace
+    on_command: object = None  # optional callback(command) for the dashboard's commanded joints
 
     def joints(self) -> np.ndarray:
         joints = np.asarray(self.robot.get_observation().joint_positions, dtype=np.float32)
@@ -190,6 +191,8 @@ class Arm:
         if self.last_command is not None:
             here[GRIPPER] = self.last_command[GRIPPER]
         self.robot.send_action(here)
+        if self.on_command is not None:
+            self.on_command(here)
         self.last_command = here
 
     def move_to(self, target: np.ndarray, speed: float | None = None, check_lag: bool = True) -> np.ndarray:
@@ -220,6 +223,8 @@ class Arm:
             s = 0.5 - 0.5 * math.cos(math.pi * i / steps)
             command = start + (target - start) * s
             self.robot.send_action(command)
+            if self.on_command is not None:
+                self.on_command(command)
             self.last_command = command
             if check_lag and i % 5 == 0:
                 lag = np.abs(self.joints()[BODY] - command[BODY])

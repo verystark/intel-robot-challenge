@@ -255,3 +255,28 @@ means full screen.
 
 **The laptop runs hot:** the package sat at 86–97 °C during these tests, with other training and
 evaluation running alongside.
+
+## Update: industrial operator screen
+
+The dashboard at http://localhost:8080 is now a plant operator screen in the ISA-101 style. It
+looks like the HMI of a real production cell: grey when normal, colour only for alarms.
+
+**What's on it:**
+- the process diagram (pick area → SO-101 → inspection → verdict → bins) with the active path and
+  a brick token;
+- three camera monitors;
+- the program-step sequence;
+- inspection, VLA-controller, production and compute-node faceplates;
+- a timestamped alarm and event log, with P1 / P2 alarms and acknowledgement;
+- tabs for the full alarm log and for trends;
+- an F-key bar.
+
+The earlier dark page stays at `/modern`, for the video.
+
+**Bugs fixed on the way:**
+- **Frozen camera feeds:** a feed whose camera stopped changing (cell stopped) never showed,
+  because an MJPEG frame only displays once the next boundary arrives.
+- **Blank first paint:** the page now carries the current state.
+
+**Checked in simulation** with headless Firefox at 1440×900 and 1920×1200: running, an early
+reject, a stop (P1), ✓ / ✗ marks, acknowledge, and the Trends and Alarms tabs.

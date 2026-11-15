@@ -201,8 +201,16 @@ running, restart the backend: Ctrl+C, wait about 30 s, then start it again.
   frames decoded with ffmpeg).
 - `loop/show_tool.py where/save` read servo positions read-only with `scservo_sdk` and the
   driver's `ticks_to_normalized`. Connecting the driver toggles torque, so the arm can sag.
-- **Dashboard (`loop/dashboard/`):** `run_cell.py` serves it at http://localhost:8080. It binds
-  to 127.0.0.1 and uses only the standard `http.server`.
+- **Operator screen (`loop/dashboard/`):** `run_cell.py` serves it at http://localhost:8080. It
+  binds to 127.0.0.1 and uses only the standard `http.server`.
+  - `/` is the ISA-101-style operator screen (`static/hmi/`): grey when normal, colour only for
+    alarms. `/modern` is the earlier dark page (`static/index.html`).
+  - Alarms and events come from `Cell.ev(prio, tag, msg)`: 1 = red, 2 = amber, 3 = info.
+    `/api/ack` acknowledges them.
+  - The served page embeds the current state (`<!--STATE-->`), so it is complete from its first
+    paint.
+  - MJPEG parts are closed by the next boundary right away, and unchanged frames are resent once
+    a second. Otherwise a frozen camera never shows.
   - Endpoints: MJPEG camera streams, server-sent events at 5 Hz, and stop / resume / pause /
     mark posts.
   - `telemetry.py` holds what it shows: frames, the joint trace, policy chunks from

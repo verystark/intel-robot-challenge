@@ -3,14 +3,15 @@
 Standard library only (http.server), so it runs in Studio's backend venv with no new packages and
 needs no internet. It binds to 127.0.0.1: the dashboard is for the station laptop's own screen.
 
-    GET  /                          the page (static/index.html)
-    GET  /static/<file>             style.css, app.js, palette.json
+    GET  /                          the operator screen (static/hmi/: ISA-101 plant-HMI style)
+    GET  /modern                    the dark presentation page (static/index.html)
+    GET  /static/<file>, /static/hmi/<file>   page assets, palette.json
     GET  /stream/<top|wrist|inspection>.mjpg   live camera, MJPEG (~12 fps)
     GET  /api/events                server-sent events: the state as JSON, 5 times a second
     GET  /api/tile/<i>.jpg          the current cycle's stop photos with heatmaps
     GET  /api/img/<cycle>/<file>    saved photos of earlier cycles (history)
     GET  /api/bench                 newest benchmark numbers (device comparison)
-    POST /api/stop | /api/resume | /api/pause      same as the keys Esc, R, Space
+    POST /api/stop | /api/resume | /api/pause | /api/ack   same as the keys Esc/F3, R/F1, Space/F2, F5
     POST /api/mark  {"cycle": 3, "ok": true|false|null}   where the brick really landed
 """
 
@@ -87,14 +88,23 @@ class DashboardServer:
                 path = self.path.split("?", 1)[0]
                 try:
                     if path in ("/", "/index.html"):
+                        # The current state is embedded, so the screen is complete from its first paint.
+                        page = (STATIC / "hmi" / "index.html").read_text()
+                        state = json.dumps({**server.cell.dashboard_state(), "bench": newest_bench()},
+                                           default=float).replace("</", "<\\/")
+                        page = page.replace("<!--STATE-->", f"<script>window.INITIAL_STATE = {state};</script>")
+                        return self._send(200, page.encode(), TYPES[".html"])
+                    if path in ("/modern", "/modern/"):
                         return self._file(STATIC / "index.html")
                     if path == "/static/palette.json":
                         return self._file(PALETTE)
                     if path.startswith("/static/"):
                         name = path[len("/static/"):]
-                        if "/" in name or name.startswith("."):
+                        parts = name.split("/")
+                        if len(parts) > 2 or (len(parts) == 2 and parts[0] != "hmi") or any(
+                                not x or x.startswith(".") for x in parts):
                             return self._send(404, b"", "text/plain")
-                        return self._file(STATIC / name)
+                        return self._file(STATIC.joinpath(*parts))
                     if path.startswith("/stream/") and path.endswith(".mjpg"):
                         cam = path[len("/stream/"):-len(".mjpg")]
                         if cam in CAMERAS:
@@ -122,7 +132,7 @@ class DashboardServer:
                 path = self.path.split("?", 1)[0]
                 length = int(self.headers.get("Content-Length") or 0)
                 body = self.rfile.read(length) if length else b""
-                if path in ("/api/stop", "/api/resume", "/api/pause"):
+                if path in ("/api/stop", "/api/resume", "/api/pause", "/api/ack"):
                     server.cell.command(path.rsplit("/", 1)[1])
                     return self._send(200, b'{"ok":true}', TYPES[".json"])
                 if path == "/api/mark":
@@ -142,15 +152,22 @@ class DashboardServer:
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("Connection", "close")
                 self.end_headers()
-                last = None
+                last, jpg, sent = None, b"", 0.0
                 try:
+                    # Each part is closed by the next boundary right away: a browser only shows a part
+                    # once its closing boundary arrives, so a frozen camera (cell stopped) would
+                    # otherwise never show its last frame. Unchanged frames are resent once a second.
+                    self.wfile.write(b"--frame\r\n")
                     while server.running:
                         image = server.cell.dashboard_frame(cam)
-                        if image is not None and image is not last:
-                            last = image
-                            jpg = _jpeg(image)
-                            self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
-                                             + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                        now = time.monotonic()
+                        if image is not None and (image is not last or now - sent > 1.0):
+                            if image is not last:
+                                last, jpg = image, _jpeg(image)
+                            sent = now
+                            self.wfile.write(b"Content-Type: image/jpeg\r\nContent-Length: " + str(len(jpg)).encode()
+                                             + b"\r\n\r\n" + jpg + b"\r\n--frame\r\n")
+                            self.wfile.flush()
                         time.sleep(1 / 12)
                 except (BrokenPipeError, ConnectionResetError, OSError):
                     pass

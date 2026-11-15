@@ -132,6 +132,10 @@ class Cell:
         self.models: dict = {}
         self._frame_cache: dict = {}
         self.view.set(narration="Loading the models…", run_state="STARTING")
+        self.t_ready: float | None = None
+        self.step_detail = ""
+        self._hot = False
+        self.telemetry.event(3, "CELL", f"Starting · mode {self.mode}")
 
     # --- Setup -----------------------------------------------------------------------
 
@@ -189,6 +193,7 @@ class Cell:
         self.arm = Arm(robot, stop=self.stop, limits=MoveLimits(speed=cfg["show"]["speed"],
                                                                  settle_s=cfg["show"]["settle_s"]))
         self.arm.on_joints = self.telemetry.put_state
+        self.arm.on_command = self.telemetry.put_command
 
         # Show pose
         if "show" in poses:
@@ -286,6 +291,10 @@ class Cell:
         self.sysmon.start()
         threading.Thread(target=self._pump, daemon=True, name="camera-pump").start()
         self.say(f"Ready. Logging to {self.run_dir.relative_to(REPO)}")
+        self.t_ready = time.monotonic()
+        policies = ("replayed episodes (no model)" if args.sim and args.replay else
+                    f"pick {self.models['pick'].name} on {args.pick_device} · sort {self.models['sort'].name} on {args.sort_device}")
+        self.ev(3, "CELL", f"Ready · {policies} · Anomalib on {args.anomaly_device}")
 
     def _real_cameras(self) -> dict:
         from physicalai.capture import RealSenseCamera, UVCCamera
@@ -298,6 +307,9 @@ class Cell:
         }
 
     # --- Helpers ---------------------------------------------------------------------
+
+    def ev(self, prio: int, tag: str, msg: str) -> None:
+        self.telemetry.event(prio, tag, msg)
 
     def say(self, message: str) -> None:
         print(message, flush=True)
@@ -372,6 +384,10 @@ class Cell:
         ms = list(self.watcher.inference_ms)
         self.all_policy_ms.extend(ms)
         self.view.set(policy_ms=self.all_policy_ms[-300:])
+        if result == "done":
+            self.ev(3, f"RBT.{name}", f"{name.title()} done in {took:.1f} s · {len(ms)} plans, median {np.median(ms) if ms else 0:.0f} ms")
+        elif result == "timeout":
+            self.ev(2, f"RBT.{name}", f"{name.title()} timeout after {took:.0f} s (no return to rest)")
         return result, took, ms
 
     def publish_photos(self, photos: list[Photo]) -> None:
@@ -406,6 +422,8 @@ class Cell:
         ms = [o[2] for o in out]
         self.all_anomaly_ms.extend(ms)
         entry.update(scores=scores, median=median, label=label(median, self.bands), ms=ms)
+        self.ev(3, f"INSP.{entry['stop'].name.replace(' deg', '')}DEG",
+                f"Score {median:.2f} (median of {len(scores)}) → {entry['label']}")
         crop = entry["crops"][i]
         photos[entry["index"]] = Photo(crop=crop, heat_overlay=heatmap_overlay(crop, out[i][1]), score=median,
                                        label=entry["label"], ms=float(np.median(ms)), name=entry["stop"].name,
@@ -444,6 +462,7 @@ class Cell:
 
         def say_stop(k: int, stop: Stop) -> None:
             ms = f" in about {np.median(self.all_anomaly_ms[-30:]):.0f} ms per photo" if self.all_anomaly_ms else ""
+            self.step_detail = f"VIEW {k + 1}/{len(stops)} @ {stop.deg:.0f}°"
             self.view.set(narration=f"Inspecting the brick: view {k + 1} of {len(stops)} "
                                     f"({stop.deg:.0f}°). Anomalib scores 3 photos on the {device}{ms}.")
 
@@ -459,6 +478,7 @@ class Cell:
                     early = True
                     self.view.set(early_reject=True)
                     self.say(f"Defective at {entries[k - 1]['stop'].name}: skipping the other stops")
+                    self.ev(3, "INSP", f"Defect at {entries[k - 1]['stop'].deg:.0f}° · remaining views skipped")
                     break
             say_stop(k, stop)
             entries.append(self.shoot(stop, photos))
@@ -478,6 +498,8 @@ class Cell:
                           narration="Unsure at " + ", ".join(f"{e['stop'].deg:.0f}°" for e in unsure)
                                     + ": taking a second look before deciding.")
             self.say("Unsure at " + ", ".join(e["stop"].name for e in unsure) + ": second look")
+            self.step_detail = "SECOND LOOK"
+            self.ev(3, "INSP", "Unsure at " + ", ".join(f"{e['stop'].deg:.0f}°" for e in unsure) + " · second look")
             for e in unsure:
                 self.arm.move_to(at(e["stop"]), speed=speed)
                 time.sleep(0.3)  # extra settling before the second look
@@ -508,6 +530,8 @@ class Cell:
     def cycle(self, n: int) -> None:
         sentences = self.cfg["sentences"]
         record: dict = {"cycle": n, "start": time.strftime("%Y-%m-%d %H:%M:%S")}
+        self.step_detail = ""
+        self.ev(3, "SEQ", f"Cycle {n} start")
         self.cycle_mon.sample()
         t_cycle = time.monotonic()
         self.view.set(cycle=n, verdict="", photos=[], sentence="", stage_times={}, verdict_sub="", stops=[],
@@ -557,6 +581,8 @@ class Cell:
         sub = (f"worst {worst.score:.2f}{where}" if worst else "") + (" · second look" if info["second_look"] else "") \
             + (" · other views skipped" if info["early_reject"] else "")
         self.view.set(verdict=verdict_, sentence=sentence, narration=told, verdict_sub=sub)
+        self.step_detail = ""
+        self.ev(3, "INSP.VERDICT", f"{verdict_} → task to VLA: “{sentence}”")
         for p in photos:
             stem = f"c{n:03d}_{p.name.replace(' ', '')}"
             cv2.imwrite(str(self.run_dir / f"{stem}.jpg"), p.crop)
@@ -634,6 +660,7 @@ class Cell:
                 try:
                     self.cycle(n)
                 except (Stopped, ArmError) as error:
+                    self.ev(1, "RBT.LAG" if isinstance(error, ArmError) else "CELL.STOP", f"Stopped: {error} · arm holding")
                     self._hold_quietly()
                     tallies = dict(self.view.tallies)
                     tallies["stops"] = tallies.get("stops", 0) + 1
@@ -651,6 +678,7 @@ class Cell:
         except BaseException as error:  # noqa: BLE001
             traceback.print_exc()
             self.say(f"Error: {type(error).__name__}: {error}")
+            self.ev(1, "CELL.ERROR", f"{type(error).__name__}: {error}")
             self.view.set(run_state="STOPPED")
             self._hold_quietly()
         finally:
@@ -683,6 +711,9 @@ class Cell:
             self.say("Stop pressed: the arm holds where it is")
         elif name == "resume":
             self.resume.set()
+            self.ev(3, "CELL", "Resume")
+        elif name == "ack":
+            self.telemetry.ack_all()
         elif name == "pause":
             if self.view.run_state == "PAUSED":
                 self.resume.set()
@@ -707,6 +738,13 @@ class Cell:
             now = time.monotonic()
             if now - last_sys >= 0.5 and self.sysmon.latest:
                 last_sys = now
+                temp = self.sysmon.latest.get("pkg_temp_c")
+                if temp is not None and temp > 90 and not self._hot:
+                    self._hot = True
+                    self.ev(2, "NODE.TEMP", f"Package {temp:.0f} °C · above 90 °C, GPU may throttle")
+                elif temp is not None and temp < 85 and self._hot:
+                    self._hot = False
+                    self.ev(3, "NODE.TEMP", f"Package {temp:.0f} °C · back below 85 °C")
                 self.telemetry.put_sys(self.sysmon.latest)
             time.sleep(0.1)
 
@@ -789,6 +827,18 @@ class Cell:
             "OPTIMIZE": {"what": "OpenVINO, on-device", "meta": (f"{temp:.0f} °C · " if temp else "") + "placement measured"},
         }
         state["devices"] = devices
+        step_no = {"PICK": 20, "SHOW": 30, "INSPECT": 40, "SORT": 60}.get(stage)
+        if stage == "HOME":
+            step_no = 50 if verdict else 10
+        timeouts = {"PICK": self.cfg["pick"]["timeout_s"], "SORT": self.cfg["sort"]["timeout_s"]}
+        state["step"] = {"no": step_no, "name": stage, "detail": self.step_detail if stage == "INSPECT" else "",
+                         "timeout_s": timeouts.get(stage)}
+        total = sum(self.cycle_times)
+        state["production"] = {
+            "throughput_h": (len(self.cycle_times) / total * 3600) if total else None,
+            "runtime_s": (time.monotonic() - self.t_ready) if self.t_ready else 0,
+            "second_looks": v.tallies.get("rechecks", 0), "stops": v.tallies.get("stops", 0),
+            "good": v.tallies.get("GOOD", 0), "reject": v.tallies.get("DEFECTIVE", 0)}
         state["task_for"] = devices["sort"]["model"] if verdict and stage in ("HOME", "SORT") else devices["pick"]["model"]
         state["cycles_done"] = len(self.cycle_times)
         state["median_cycle_s"] = float(np.median(self.cycle_times)) if self.cycle_times else None

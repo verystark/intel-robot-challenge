@@ -322,6 +322,8 @@ class StageWatcher:
                 self.clamped += 1
                 action = self._last_action + np.clip(delta, -limit, limit)
         self._last_action = action
+        if self.telemetry is not None:
+            self.telemetry.put_command(action)
         return action
 
 

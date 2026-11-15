@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CELL 01 · Brick QC &amp; Sort · Operator screen</title>
+  <link rel="stylesheet" href="/static/hmi/hmi.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="ident"><b>CELL 01</b><span class="sep">│</span>BRICK QC &amp; SORT<span class="sep">│</span><span id="screenName">OVERVIEW</span></div>
+  <div class="hdr-right">
+    <div class="hbox"><span class="k">MODE</span><span class="v" id="mode">–</span></div>
+    <div class="hbox"><span class="k">STATE</span><span class="v" id="state">–</span></div>
+    <div class="hbox alm" id="almBox"><span class="k">ALM</span><span class="v" id="almCount">0</span></div>
+    <div class="hbox clock"><span class="v" id="clock">–</span></div>
+  </div>
+</header>
+
+<div class="banner" id="banner">NO UNACKNOWLEDGED ALARMS</div>
+
+<nav class="tabs">
+  <button class="tab on" data-tab="overview">OVERVIEW <small>F6</small></button>
+  <button class="tab" data-tab="alarms">ALARMS / EVENTS <small>F7</small></button>
+  <button class="tab" data-tab="trends">TRENDS <small>F8</small></button>
+</nav>
+
+<main>
+  <!-- OVERVIEW -->
+  <section class="screen on" id="tab-overview">
+    <div class="ov">
+      <div class="fp mimic-fp">
+        <div class="fp-h">PROCESS · BRICK INSPECTION AND SORTING</div>
+        <svg id="mimic" role="img" aria-label="Process diagram of the cell"></svg>
+      </div>
+
+      <div class="cams">
+        <div class="cam"><div class="cam-h">CAM 01 · TOP · POLICY INPUT</div><div class="cam-b"><img src="/stream/top.mjpg" alt=""><div class="osd" data-cam="CAM01"></div></div></div>
+        <div class="cam"><div class="cam-h">CAM 02 · WRIST · POLICY INPUT</div><div class="cam-b"><img src="/stream/wrist.mjpg" alt=""><div class="osd" data-cam="CAM02"></div></div></div>
+        <div class="cam"><div class="cam-h">CAM 03 · INSPECTION · ANOMALIB OVERLAY</div><div class="cam-b"><img src="/stream/inspection.mjpg" alt=""><div class="osd" data-cam="CAM03"></div><div class="osd-live" id="osdLive"></div></div></div>
+      </div>
+
+      <div class="right">
+        <div class="fp seq-fp">
+          <div class="fp-h">SEQUENCE</div>
+          <div class="steps" id="steps"></div>
+          <div class="seq-line" id="seqLine"></div>
+        </div>
+
+        <div class="fp insp-fp">
+          <div class="fp-h" id="inspHead">INSPECTION STATION · ANOMALIB PATCHCORE</div>
+          <div class="verdict-row">
+            <div class="vd"><span class="swatch" id="vdSwatch"></span><span id="verdict">—</span></div>
+            <div class="vd-sub" id="verdictSub"></div>
+          </div>
+          <svg class="gauge" id="gauge" role="img" aria-label="Anomaly score against the limits"></svg>
+          <table class="tbl stops"><thead><tr><th>VIEW</th><th>HEATMAP</th><th>MEDIAN</th><th>FRAMES</th><th>RESULT</th></tr></thead><tbody id="stops"></tbody></table>
+          <div class="task"><span class="k">TASK → VLA</span><span class="disp" id="task">–</span></div>
+        </div>
+
+        <div class="fp vla-fp">
+          <div class="fp-h" id="vlaHead">VLA CONTROLLER</div>
+          <div class="vla-line" id="vlaLine"></div>
+          <table class="tbl joints"><thead><tr><th>JOINT</th><th>ACT %</th><th>CMD %</th><th>DEV</th><th class="w">LAST 4 s · PLAN (dashed)</th></tr></thead><tbody id="joints"></tbody></table>
+        </div>
+      </div>
+
+      <div class="fp prod-fp">
+        <div class="fp-h">PRODUCTION · SINCE START</div>
+        <div class="prod">
+          <table class="tbl kv" id="prodTbl"></table>
+          <div class="last">
+            <div class="sub-h">LAST BRICKS · ✓ / ✗ = WHERE IT LANDED</div>
+            <div id="lastBricks"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fp ev-fp">
+        <div class="fp-h">EVENTS <span class="hint">newest first · F5 acknowledges</span></div>
+        <table class="tbl events"><thead><tr><th>TIME</th><th>PRIO</th><th>TAG</th><th>MESSAGE</th></tr></thead><tbody id="evRecent"></tbody></table>
+      </div>
+
+      <div class="fp node-fp">
+        <div class="fp-h" id="nodeHead">COMPUTE NODE · OPENVINO · ON-DEVICE</div>
+        <div id="node"></div>
+        <div class="placement" id="placement"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ALARMS -->
+  <section class="screen" id="tab-alarms">
+    <div class="fp full">
+      <div class="fp-h">ALARM AND EVENT LOG <span class="hint">P1 high · P2 medium · INFO no acknowledgement needed</span></div>
+      <div class="scroll"><table class="tbl events big"><thead><tr><th>TIME</th><th>PRIO</th><th>STATE</th><th>TAG</th><th>MESSAGE</th></tr></thead><tbody id="evAll"></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- TRENDS -->
+  <section class="screen" id="tab-trends">
+    <div class="trends">
+      <div class="fp"><div class="fp-h">INSP.SCORE · WORST VIEW PER BRICK · LIMITS SHADED</div><svg class="trend" id="trScore"></svg></div>
+      <div class="fp"><div class="fp-h">CYCLE TIME PER BRICK · s</div><svg class="trend" id="trCycle"></svg></div>
+      <div class="fp"><div class="fp-h">NODE LOAD · % · LAST 10 min</div><svg class="trend" id="trLoad"></svg></div>
+      <div class="fp"><div class="fp-h">PACKAGE TEMPERATURE · °C · LAST 10 min</div><svg class="trend" id="trTemp"></svg></div>
+    </div>
+  </section>
+</main>
+
+<footer class="fkeys">
+  <button data-cmd="resume"><i>F1</i>START / RESUME</button>
+  <button data-cmd="pause"><i>F2</i>PAUSE</button>
+  <button data-cmd="stop" class="stop"><i>F3</i>STOP</button>
+  <button data-cmd="ack"><i>F5</i>ACK ALARMS</button>
+  <button data-tab="overview"><i>F6</i>OVERVIEW</button>
+  <button data-tab="alarms"><i>F7</i>ALARMS</button>
+  <button data-tab="trends"><i>F8</i>TRENDS</button>
+  <button data-cmd="full"><i>F11</i>FULL SCREEN</button>
+  <span class="conn" id="conn">LINK OK</span>
+</footer>
+
+<!--STATE-->
+<script src="/static/hmi/hmi.js"></script>
+</body>
+</html>

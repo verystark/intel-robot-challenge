@@ -18,6 +18,22 @@
     "UNSURE": "#f2b84b"
   },
   "stop": "#ff4d4d",
+  "hmi": {
+    "note": "ISA-101 operator screen (loop/dashboard/static/hmi): grey when normal, colour only for alarms",
+    "background": "#d4d4d4",
+    "panel": "#e3e3e3",
+    "display": "#f2f2f2",
+    "line": "#8a8a8a",
+    "equipment_on": "#4a4a4a",
+    "text": "#1c1c1c",
+    "muted": "#5a5a5a",
+    "normal_range": "#b9c8d8",
+    "alarm_high": "#d32f2f",
+    "alarm_medium": "#f2a900",
+    "info": "#1f5fbf",
+    "plate_good": "#2fbf9a",
+    "plate_reject": "#ff8a3d"
+  },
   "devices": {
     "GPU": "#5b8def",
     "NPU": "#a479f2",

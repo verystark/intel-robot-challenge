@@ -27,7 +27,11 @@ class Telemetry:
         self.chunk: tuple[float, list[list[float]], float, str] | None = None  # (time, actions, ms, stage)
         self.chunk_ms: dict[str, deque[float]] = {"pick": deque(maxlen=200), "sort": deque(maxlen=200)}
         self.live: dict | None = None  # live inspection score: {"t", "score", "label", "moving", "heat"}
-        self.sys_series: deque[tuple[float, dict]] = deque(maxlen=240)  # 2 min at 0.5 s
+        self.sys_series: deque[tuple[float, dict]] = deque(maxlen=1200)  # 10 min at 0.5 s
+        self.events: deque[dict] = deque(maxlen=500)  # alarm and event log, newest last
+        self._event_id = 0
+        self.command: list[float] | None = None  # last commanded joints (policy or scripted)
+        self._last_command_t = 0.0
         self.history: list[dict] = []
         self.marks: dict[int, bool] = {}
         self.tiles: list[dict] = []  # current cycle's stop tiles: {"v", "image"} served from memory
@@ -55,6 +59,26 @@ class Telemetry:
             if stage in self.chunk_ms:
                 self.chunk_ms[stage].append(latency_ms)
 
+    def put_command(self, joints) -> None:
+        now = time.monotonic()
+        if now - self._last_command_t < 0.1:
+            return
+        self._last_command_t = now
+        with self.lock:
+            self.command = [round(float(x), 1) for x in np.asarray(joints).reshape(-1)[:6]]
+
+    def event(self, prio: int, tag: str, msg: str) -> None:
+        """Alarm / event log. prio 1 = high (red), 2 = medium (amber), 3 = information (no ack needed)."""
+        with self.lock:
+            self._event_id += 1
+            self.events.append({"id": self._event_id, "time": time.strftime("%H:%M:%S"), "prio": prio,
+                                "tag": tag, "msg": msg, "acked": prio >= 3})
+
+    def ack_all(self) -> None:
+        with self.lock:
+            for e in self.events:
+                e["acked"] = True
+
     def put_live(self, score: float | None, label: str, moving: bool, heat: np.ndarray | None) -> None:
         with self.lock:
             self.live = {"t": time.monotonic(), "score": score, "label": label, "moving": moving, "heat": heat}
@@ -79,6 +103,10 @@ class Telemetry:
             else:
                 self.marks[cycle] = ok
             marks = dict(self.marks)
+        if ok is True:
+            self.event(3, "QC.MARK", f"Brick #{cycle} checked: right plate")
+        elif ok is False:
+            self.event(2, "QC.MARK", f"Brick #{cycle} checked: WRONG plate or dropped")
         if self.run_dir is not None:
             (self.run_dir / "marks.json").write_text(json.dumps({str(k): v for k, v in marks.items()}, indent=1) + "\n")
 
@@ -114,12 +142,23 @@ class Telemetry:
             if self.live is not None:
                 live = {k: v for k, v in self.live.items() if k not in ("heat", "t")}
                 live["age_s"] = round(now - self.live["t"], 2)
+            keys = ("gpu_pct", "npu_pct", "cpu_pct", "pkg_temp_c", "pkg_w", "battery_w")
             series = list(self.sys_series)[-120:]
-            sys = {key: [r.get(key) for _, r in series] for key in ("gpu_pct", "npu_pct", "cpu_pct", "pkg_temp_c", "pkg_w", "battery_w")}
+            sys = {key: [r.get(key) for _, r in series] for key in keys}
+            longer = list(self.sys_series)[::5]
+            sys_long = {key: [r.get(key) for _, r in longer] for key in keys}
+            sys_long["age_s"] = [round(t - now, 1) for t, _ in longer]
+            events = list(self.events)
+            unacked = [e for e in events if not e["acked"]]
+            scores = [{"cycle": h["cycle"], "worst": h["worst"], "verdict": h["verdict"], "cycle_s": h["cycle_s"]}
+                      for h in self.history[-100:]]
+            command = self.command
             chunk_ms = {k: (float(np.median(v)) if v else None) for k, v in self.chunk_ms.items()}
             history = [dict(h, mark=self.marks.get(h["cycle"])) for h in self.history[-10:]]
             marked = [self.marks[c] for c in self.marks]
             tiles = [t["v"] for t in self.tiles]
-        return {"trace": trace, "chunk": chunk, "live": live, "sys": sys, "chunk_ms": chunk_ms,
+        return {"trace": trace, "chunk": chunk, "live": live, "sys": sys, "sys_long": sys_long, "chunk_ms": chunk_ms,
+                "events": events[::-1][:200], "unacked": len(unacked),
+                "banner": (unacked[-1] if unacked else None), "scores": scores, "command": command,
                 "history": history, "tiles": tiles,
                 "success": {"ok": sum(1 for m in marked if m), "marked": len(marked)}}

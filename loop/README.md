@@ -22,43 +22,66 @@ PY=physical-ai-studio/application/backend/.venv/bin/python
 | `screen.py` | The demo screen |
 | `runs/` | One folder per run: `cycles.jsonl`, photos with heatmaps, `config.json`, `summary.json` (git-ignored) |
 
-## The dashboard
+## The operator screen
 
-`run_cell.py` serves a live dashboard at **http://localhost:8080** (this laptop only; it binds to
-127.0.0.1). Add `--open` to open it full screen in Firefox, or press `F` in the page.
+`run_cell.py` serves the cell's operator screen at **http://localhost:8080**. It is reachable from
+this laptop only (it binds to 127.0.0.1). Add `--open` to open it full screen in Firefox, or press
+`F11` in the page.
 
-**What it shows:**
-- **Pipeline bar:** Perceive → Detect → Reason → Act → Optimize. What runs in each stage and on
-  which device, with live latency; the active stages are lit.
-- **Narration:** one plain line saying what is happening right now, plus the time of each
-  stage.
-- **Cameras:**
-  - top and wrist, the policy's inputs;
-  - the inspection camera with the crop box, and a live Anomalib heatmap while the brick is
-    shown. Live scores taken while the arm moves are labelled as not used for the decision.
-- **Verdict panel:**
-  - the verdict in the plate's colour;
-  - the exact sentence sent to the policy;
-  - each stop's photo, heatmap and score, with early-reject and second-look badges;
-  - the score bar with the bands.
-- **Policy plan:** for each joint, the measured position over the last 4 s and the motion the
-  policy just planned (dashed), with plan time and latency.
-- **On this laptop:** GPU, NPU and CPU load, which model runs where, package temperature and
-  power, and the measured per-device latencies from the newest benchmark.
-- **Last bricks:** each brick's photo and heatmap, verdict, score and cycle time.
-  - **✓ / ✗ buttons:** a teammate marks where the brick really landed. The marks give
-    "sorted correctly N of M" in the corner tile and in `bench/RESULTS.md` (saved as
-    `runs/<time>/marks.json`).
+**Style:** it follows ISA-101, the guideline for plant operator screens, the way real production
+cells look:
+- **Grey when normal:** running equipment is filled dark grey, idle equipment is an outline.
+- **Colour only for alarms:** red = priority 1, amber = priority 2. Unacknowledged alarms blink
+  until `F5`.
+- **Plate swatches:** the GOOD and REJECT bins carry small swatches matching the real plates.
 
-**Keys in the page:** `Esc` or `S` = stop the arm (it holds), `R` = resume, `Space` = pause after
-this cycle, or start the next cycle when paused, `F` = full screen. The red STOP button does the
-same as Esc. `Ctrl+C` in the terminal always stops.
+| Area | What it shows |
+|---|---|
+| Header, alarm banner | Cell, screen, mode (`SIM` / `AUTO` / `INSP ONLY`), state, unacknowledged alarm count, clock; the newest unacknowledged alarm |
+| Process | A flow diagram: pick area → SO-101 → inspection station → verdict → GOOD / REJECT bins. The active path is drawn heavy, a token marks the brick, the bins show their counts, and each block carries live tags |
+| CAM 01 / 02 / 03 | Top and wrist cameras (the policy's inputs) and the inspection camera with the crop box and the live Anomalib heatmap. Each has a timestamp overlay |
+| Sequence | Program steps `10 HOME · 20 PICK · 30 SHOW · 40 INSPECT · 50 HOME · 60 SORT`, the current view, elapsed time against the stage timeout |
+| Inspection station | Verdict, score gauge with the GOOD / REJECT limits, each view's heatmap, median, frames and result (skipped views marked), and the exact `TASK → VLA` sentence |
+| VLA controller | Model, device, plan length, latency, async; J1–J6 actual, commanded and deviation, with the last 4 s and the policy's planned motion (dashed) |
+| Production | Inspected / good / reject, reject rate, second looks, throughput, median cycle, run time, sorted OK |
+| Last bricks | ✓ / ✗ buttons: a teammate marks where each brick really landed, saved to `runs/<time>/marks.json` and counted in `bench/RESULTS.md` |
+| Events | Timestamped log: priority, tag, message |
+| Compute node | GPU / NPU / CPU load and who runs there, package temperature against the 90 °C alarm, power, and the measured per-device latencies from the newest benchmark |
+
+**Tabs:**
+- `F6` **Overview**.
+- `F7` **Alarms / events:** the full log, with the acknowledgement state.
+- `F8` **Trends:**
+  - the score of every brick against the shaded limits;
+  - cycle time per brick;
+  - node load and package temperature over 10 minutes.
+
+`http://localhost:8080/#trends` or `#alarms` opens straight on that tab, for a second monitor.
+
+**Alarms the loop raises:**
+
+| Priority | Alarms |
+|---|---|
+| P1 | Stop (E-STOP key or button), arm lag abort, loop error |
+| P2 | Pick or sort timeout, package above 90 °C, a brick marked ✗ |
+
+Verdicts, views, second looks and mode changes are logged as INFO.
+
+**Keys:**
+- `F1` start / resume (or `R`).
+- `F2` pause after this cycle (or `Space`); in `--inspect-only` it starts each cycle.
+- `F3` or `Esc` or `S`: stop, and the arm holds.
+- `F5` acknowledge alarms.
+- `F11` full screen.
+
+The buttons along the bottom do the same, and `Ctrl+C` in the terminal always stops.
 
 **Options:**
+- `/modern` is the earlier dark presentation page, kept for the video.
 - `--window` also opens the old Tk screen.
-- `--no-web` skips the dashboard.
+- `--no-web` skips the screen.
 - `--web-port N` changes the port.
-- `--headless` (also `--no-window`) is test mode: a stop ends the run instead of waiting for `R`.
+- `--headless` (also `--no-window`) is test mode: a stop ends the run instead of waiting for `F1`.
 
 ## One cycle
 
