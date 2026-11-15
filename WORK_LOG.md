@@ -227,3 +227,31 @@ Three commits on `main`, pushed as `6720e79..7c06559`:
   held-out good bricks at a median of 0.59, and defects at 0.84. With calibrated bands, 16 of 22
   good bricks and 15 of 25 defects would fall in the unsure band, so nearly everything would be
   rejected. The fix is more good photos taken by `collect` at the real stops, then retraining.
+
+## Update: live dashboard
+
+`run_cell.py` now serves a dashboard at http://localhost:8080 (`--open` = full screen in Firefox).
+It replaces the Tk window as the main screen; `--window` keeps the old one.
+
+**What's on it:**
+- the Perceive → Detect → Reason → Act → Optimize bar, with device and latency per stage;
+- plain narration of the current step;
+- the top, wrist and inspection cameras, with a live Anomalib heatmap while inspecting;
+- the verdict and the exact sentence sent to the policy;
+- the stop tiles with heatmaps, and the score bar;
+- the policy's planned vs measured joints;
+- GPU / NPU / CPU load, temperature and the measured placement;
+- the last bricks, with ✓ / ✗ marks. A teammate clicks them to count correct sorts, which feed
+  `bench/RESULTS.md`.
+
+**Look:** it follows `VIDEO_PLAN.md`: dark grey, one accent colour per stage, the plate colours for
+verdicts, fades only. The colours are in `loop/dashboard/palette.json` for the video to reuse.
+
+**Checked in simulation** with headless Firefox at 1440×900 and 1920×1200, with replayed episodes
+and with the real SmolVLA. The stop and mark posts work.
+
+`PLAN_AND_SHOW.md` and `VIDEO_PLAN.md` still say "loop window"; it is now this page, and `F` still
+means full screen.
+
+**The laptop runs hot:** the package sat at 86–97 °C during these tests, with other training and
+evaluation running alongside.

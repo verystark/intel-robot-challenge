@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sorting cell · live</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main id="app">
+
+  <header class="pipeline">
+    <div class="stage" data-stage="PERCEIVE"><div class="stage-name">Perceive</div><div class="stage-what" id="w-PERCEIVE"></div><div class="stage-meta" id="m-PERCEIVE"></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" data-stage="DETECT"><div class="stage-name">Detect</div><div class="stage-what" id="w-DETECT"></div><div class="stage-meta" id="m-DETECT"></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" data-stage="REASON"><div class="stage-name">Reason</div><div class="stage-what" id="w-REASON"></div><div class="stage-meta" id="m-REASON"></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" data-stage="ACT"><div class="stage-name">Act</div><div class="stage-what" id="w-ACT"></div><div class="stage-meta" id="m-ACT"></div></div>
+    <div class="arrow">→</div>
+    <div class="stage" data-stage="OPTIMIZE"><div class="stage-name">Optimize</div><div class="stage-what" id="w-OPTIMIZE"></div><div class="stage-meta" id="m-OPTIMIZE"></div></div>
+    <div class="status">
+      <div class="status-row"><span class="chip mode" id="mode">…</span><span class="runstate" id="runstate">…</span></div>
+      <div class="status-row"><span class="cycle">cycle <b id="cycle">–</b></span><button id="stop" title="Stop the arm (Esc)">STOP</button></div>
+    </div>
+  </header>
+
+  <section class="panel narration">
+    <div class="narr" id="narration">Starting the cell…</div>
+    <ol class="steps" id="steps">
+      <li data-s="PICK">Pick<span></span></li>
+      <li data-s="SHOW">Show<span></span></li>
+      <li data-s="INSPECT">Inspect<span></span></li>
+      <li data-s="HOME">Home<span></span></li>
+      <li data-s="SORT">Sort<span></span></li>
+    </ol>
+  </section>
+
+  <section class="panel cam cam-top">
+    <img src="/stream/top.mjpg" alt="Top camera">
+    <div class="cam-label"><b>Top camera</b> · what the policy sees</div>
+  </section>
+
+  <section class="panel cam cam-insp">
+    <img src="/stream/inspection.mjpg" alt="Inspection camera">
+    <div class="cam-label"><b>Inspection camera</b> · Anomalib heatmap while inspecting</div>
+    <div class="live hidden" id="live"></div>
+  </section>
+
+  <section class="panel verdict-panel" id="verdictPanel">
+    <div class="verdict-head">
+      <div class="verdict" id="verdict">Waiting</div>
+      <div class="verdict-sub" id="verdictSub">No brick inspected yet</div>
+    </div>
+    <div class="sentence-box">
+      <div class="label">Sent to the sort policy as its task</div>
+      <div class="sentence" id="sentence">–</div>
+    </div>
+    <div class="stops" id="stops"></div>
+    <svg class="scorebar" id="scorebar" viewBox="0 0 420 58" role="img" aria-label="Anomaly score of each stop against the good, unsure and defective bands"></svg>
+  </section>
+
+  <section class="panel cam cam-wrist">
+    <img src="/stream/wrist.mjpg" alt="Wrist camera">
+    <div class="cam-label"><b>Wrist camera</b></div>
+  </section>
+
+  <section class="panel plan">
+    <div class="panel-title" id="planTitle">Policy plan</div>
+    <svg id="plan" viewBox="0 0 440 170" role="img" aria-label="Joint positions: measured and planned by the policy"></svg>
+    <div class="legend"><span class="lg measured"></span>measured <span class="lg planned"></span>planned by the policy <span class="now-note">| = now</span></div>
+  </section>
+
+  <section class="panel devices">
+    <div class="panel-title">On this laptop · OpenVINO, no cloud</div>
+    <div id="devices"></div>
+    <div class="thermal" id="thermal"></div>
+    <div class="placement" id="placement"></div>
+  </section>
+
+  <section class="panel history">
+    <div class="panel-title">Last bricks <span class="hint">mark where each brick really landed: ✓ right plate, ✗ wrong</span></div>
+    <div class="cards" id="cards"><div class="empty">No bricks yet</div></div>
+  </section>
+
+  <section class="panel number" id="number">
+    <div class="num-big"><span id="numOk">–</span><span class="of"> of </span><span id="numMarked">–</span></div>
+    <div class="num-label">sorted onto the right plate <small>(checked by hand)</small></div>
+    <div class="num-sub" id="numSub"></div>
+  </section>
+
+</main>
+<div class="offline hidden" id="offline">No connection to the loop. Is <code>run_cell.py</code> running?</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

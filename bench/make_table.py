@@ -120,8 +120,12 @@ def loop_section(run: Path) -> list[str]:
     anomaly_ms = [m for c in done for m in c["inspect"].get("anomaly_ms", [])]
     temps = [c["system"]["pkg_temp_c"] for c in done if c.get("system", {}).get("pkg_temp_c") is not None]
     watts = [c["system"]["pkg_w"] for c in done if c.get("system", {}).get("pkg_w") is not None]
+    marks_path = run / "marks.json"
+    marks = json.loads(marks_path.read_text()) if marks_path.exists() else {}
+    checked = f"{sum(1 for v in marks.values() if v)} of {len(marks)}" if marks else "not marked (use the dashboard's ✓ / ✗)"
     lines += [
         "| | |", "|---|---|",
+        f"| Sorted onto the right plate (checked by hand) | {checked} |",
         f"| Cycles completed / stopped | {len(done)} / {stops} |",
         f"| Verdicts good / defective (re-checked) | {verdicts.count('GOOD')} / {verdicts.count('DEFECTIVE')} "
         f"({sum(1 for c in done if c['inspect'].get('rechecked'))}) |",
@@ -133,8 +137,8 @@ def loop_section(run: Path) -> list[str]:
         f"| Package temperature during cycles, max | {max(temps) if temps else '-'} °C |",
         f"| Package power during cycles, mean | {f'{statistics.mean(watts):.1f} W' if watts else 'not measured (needs RAPL access)'} |",
         "",
-        "Correct sorting must be counted by a person (the log knows the verdict, not where the brick landed): "
-        "write it next to this table as 'sorted correctly N of M'.", "",
+        "Where each brick landed is marked by a person on the dashboard (✓ / ✗ on each brick); the log alone "
+        "knows the verdict, not the plate it reached.", "",
     ]
     return lines
 

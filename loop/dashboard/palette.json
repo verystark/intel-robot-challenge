@@ -1,0 +1,26 @@
+{
+  "note": "Colours of the cell's dashboard (loop/dashboard). The video can import this file so screen recordings and graphics match.",
+  "background": "#121418",
+  "panel": "#1b1f26",
+  "panel_line": "#2a303a",
+  "text": "#f2f4f7",
+  "muted": "#98a2b3",
+  "stages": {
+    "PERCEIVE": "#5b8def",
+    "DETECT": "#a479f2",
+    "REASON": "#e46fb1",
+    "ACT": "#8fb3c9",
+    "OPTIMIZE": "#9aa4b2"
+  },
+  "verdict": {
+    "GOOD": "#2fbf9a",
+    "DEFECTIVE": "#ff8a3d",
+    "UNSURE": "#f2b84b"
+  },
+  "stop": "#ff4d4d",
+  "devices": {
+    "GPU": "#5b8def",
+    "NPU": "#a479f2",
+    "CPU": "#9aa4b2"
+  }
+}

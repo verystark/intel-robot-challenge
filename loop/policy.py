@@ -248,6 +248,7 @@ class StageWatcher:
         self.ease_s = 1.0
         self._last_action: np.ndarray | None = None
         self.stop_flag: threading.Event | None = None
+        self.telemetry = None  # dashboard: camera frames, joint trace, the policy's plans
         self._lock = threading.Lock()
 
     def begin(self, stage: str, start_pose: np.ndarray, rules: StageRules,
@@ -271,6 +272,10 @@ class StageWatcher:
         self.latest_state = state
         if event.camera_frames:
             self.latest_frames = dict(event.camera_frames)
+        if self.telemetry is not None:
+            self.telemetry.put_state(state)
+            for name, frame in (event.camera_frames or {}).items():
+                self.telemetry.put_frame(name, frame.data, rgb=True)
         if self.runtime is None or self.start_pose is None or self.result:
             return
         if self.stop_flag is not None and self.stop_flag.is_set():
@@ -303,6 +308,8 @@ class StageWatcher:
 
     def on_inference(self, event) -> None:
         self.inference_ms.append(event.latency_s * 1000)
+        if self.telemetry is not None and getattr(event, "chunk", None) is not None:
+            self.telemetry.put_chunk(event.chunk, event.latency_s * 1000, self.stage.lower())
 
     def on_action_ready(self, *, action: np.ndarray, step: int) -> np.ndarray:  # noqa: ARG002
         """Safety: limit how far any joint may jump in one tick, gently at the start of a stage."""

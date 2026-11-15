@@ -11,7 +11,8 @@ PY=physical-ai-studio/application/backend/.venv/bin/python
 
 | File | What it does |
 |---|---|
-| `run_cell.py` | The loop, the demo screen and the log |
+| `run_cell.py` | The loop, the dashboard and the log |
+| `dashboard/` | The live web dashboard: `server.py` (local web server), `telemetry.py` (what it shows), `static/` (page), `palette.json` (colours, shared with the video) |
 | `show_tool.py` | `where` / `save` the show pose (read-only), `goto`, `test-turn`, `collect` photos |
 | `cell_config.json` | Models, devices, sentences, timeouts, show settings, camera ids |
 | `poses.json` | Saved poses (`show`, `home`, optional `via`), written by `show_tool.py save` |
@@ -20,6 +21,44 @@ PY=physical-ai-studio/application/backend/.venv/bin/python
 | `inspection.py` | Inspection webcam (same crop and settings as `capture.py`), background Anomalib scoring |
 | `screen.py` | The demo screen |
 | `runs/` | One folder per run: `cycles.jsonl`, photos with heatmaps, `config.json`, `summary.json` (git-ignored) |
+
+## The dashboard
+
+`run_cell.py` serves a live dashboard at **http://localhost:8080** (this laptop only; it binds to
+127.0.0.1). Add `--open` to open it full screen in Firefox, or press `F` in the page.
+
+**What it shows:**
+- **Pipeline bar:** Perceive → Detect → Reason → Act → Optimize. What runs in each stage and on
+  which device, with live latency; the active stages are lit.
+- **Narration:** one plain line saying what is happening right now, plus the time of each
+  stage.
+- **Cameras:**
+  - top and wrist, the policy's inputs;
+  - the inspection camera with the crop box, and a live Anomalib heatmap while the brick is
+    shown. Live scores taken while the arm moves are labelled as not used for the decision.
+- **Verdict panel:**
+  - the verdict in the plate's colour;
+  - the exact sentence sent to the policy;
+  - each stop's photo, heatmap and score, with early-reject and second-look badges;
+  - the score bar with the bands.
+- **Policy plan:** for each joint, the measured position over the last 4 s and the motion the
+  policy just planned (dashed), with plan time and latency.
+- **On this laptop:** GPU, NPU and CPU load, which model runs where, package temperature and
+  power, and the measured per-device latencies from the newest benchmark.
+- **Last bricks:** each brick's photo and heatmap, verdict, score and cycle time.
+  - **✓ / ✗ buttons:** a teammate marks where the brick really landed. The marks give
+    "sorted correctly N of M" in the corner tile and in `bench/RESULTS.md` (saved as
+    `runs/<time>/marks.json`).
+
+**Keys in the page:** `Esc` or `S` = stop the arm (it holds), `R` = resume, `Space` = pause after
+this cycle, or start the next cycle when paused, `F` = full screen. The red STOP button does the
+same as Esc. `Ctrl+C` in the terminal always stops.
+
+**Options:**
+- `--window` also opens the old Tk screen.
+- `--no-web` skips the dashboard.
+- `--web-port N` changes the port.
+- `--headless` (also `--no-window`) is test mode: a stop ends the run instead of waiting for `R`.
 
 ## One cycle
 
@@ -88,7 +127,7 @@ episodes in the sort model's dataset and says so.
 
 | # | Command | Moves the arm? | Check |
 |---|---|---|---|
-| 1 | `$PY loop/run_cell.py --sim --replay --cycles 2` | No | The window opens and shows both stages, photos, heatmaps and timings |
+| 1 | `$PY loop/run_cell.py --sim --replay --cycles 2 --open` | No | The dashboard opens full screen and fills in: cameras, stops, heatmaps, verdict, history |
 | 2 | `$PY loop/show_tool.py where` | No | Joint values look sane |
 | 3 | `$PY loop/show_tool.py save` | No | The show pose is saved; it prints the wrist stops it allows |
 | 3b | `$PY loop/show_tool.py save --name home` | No | With the arm at home holding a brick (optional: else the dataset's sort start is used) |
@@ -120,11 +159,16 @@ $PY loop/run_cell.py --anomaly-device NPU --anomaly-model anomaly/exported_model
 SmolVLA all-zero start noise, which gave 5–10× less jerk in offline tests. Set it to `false` to
 compare.
 
-## Window keys
+## Keys
 
-`Esc` or `s` = stop the arm now (it holds), `r` = resume after a stop, `space` = pause after this
-cycle (and `space` again to continue), `f` = full screen, `q` = quit. `Ctrl+C` in the terminal also
-stops. In `--inspect-only`, `space` starts each cycle.
+The same in the dashboard and in the Tk window (`--window`):
+- `Esc` or `s`: stop the arm now (it holds).
+- `r`: resume after a stop.
+- `space`: pause after this cycle; `space` again to continue. In `--inspect-only`, `space`
+  starts each cycle.
+- `f`: full screen.
+- `q`: quit (Tk window only).
+- `Ctrl+C` in the terminal also stops.
 
 ## Simulation (no hardware)
 
@@ -142,7 +186,10 @@ stops. In `--inspect-only`, `space` starts each cycle.
   about 3–4 whether it holds a brick or not. An empty pick still goes through inspection. No
   training photo shows an empty gripper, so it should score high and be sent to the defective
   plate, but that hasn't been tested yet: try it once with checklist step 6.
-- **Correct sorting is counted by a person.** The log knows the verdict, not where the brick
-  landed.
-- **The Tk window has only been checked through saved screens** (`--save-screens`). Run checklist
-  step 1 at the station once.
+- **Correct sorting is counted by a person**, with the dashboard's ✓ / ✗. The log knows the
+  verdict, not where the brick landed.
+- **The dashboard was checked in simulation with headless Firefox** at 1440×900 and 1920×1200.
+  - It hasn't run with the real cameras yet.
+  - The top and wrist feeds come from the runtime while a policy runs, and are read directly
+    between runs.
+  - The Tk window (`--window`) has only been checked through saved screens.

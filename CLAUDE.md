@@ -201,6 +201,20 @@ running, restart the backend: Ctrl+C, wait about 30 s, then start it again.
   frames decoded with ffmpeg).
 - `loop/show_tool.py where/save` read servo positions read-only with `scservo_sdk` and the
   driver's `ticks_to_normalized`. Connecting the driver toggles torque, so the arm can sag.
+- **Dashboard (`loop/dashboard/`):** `run_cell.py` serves it at http://localhost:8080. It binds
+  to 127.0.0.1 and uses only the standard `http.server`.
+  - Endpoints: MJPEG camera streams, server-sent events at 5 Hz, and stop / resume / pause /
+    mark posts.
+  - `telemetry.py` holds what it shows: frames, the joint trace, policy chunks from
+    `on_inference`, the live score, history and marks.
+  - Between policy runs a camera pump reads the cameras under `cam_lock`, so it and the runtime
+    never read one camera at once.
+  - `LiveScorer` scores the inspection feed only during SHOW / INSPECT and only when the stop
+    scorer is idle.
+  - Colours live in `palette.json`, which the video reuses.
+  - Check the page with
+    `firefox --headless --no-remote --profile ~/snap/firefox/common/<dir> --screenshot <png>`.
+    Snap Firefox can't write to /tmp.
 - `bench/sysmon.py` reads temperature, NPU busy, GPU busy and battery power without root. RAPL
   needs `sudo chmod o+r .../intel-rapl:0/energy_uj`.
 

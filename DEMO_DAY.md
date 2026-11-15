@@ -45,7 +45,7 @@ wrist camera   ─┴──▶ pick policy (SmolVLA      PatchCore score +      
 | Measure | `bench/sysmon.py`: temperature, CPU / GPU / NPU busy, power | – | Judges want evidence. |
 
 Code:
-- `loop/run_cell.py` is the loop and the screen.
+- `loop/run_cell.py` is the loop and serves the live dashboard (http://localhost:8080, `--open` for full screen).
 - `loop/show_tool.py` saves the show pose and collects photos.
 - `anomaly/` trains, exports, quantises and calibrates Anomalib.
 - `bench/` holds the measurements.
@@ -125,7 +125,7 @@ To use ACT for the pick: add `--pick-model <ACT name> --pick-device NPU`.
 **The demo (about 5 minutes):**
 1. **Problem (20 s).** Factories inspect parts by eye. We taught a small low-cost arm to pick, inspect
    and sort from a few hundred recorded demonstrations (say the episode count of the dataset you used).
-2. **Start** `run_cell.py`. While it picks: "SmolVLA sees the top and wrist cameras and was told
+2. **Start** `run_cell.py --open` (the dashboard opens full screen). While it picks: "SmolVLA sees the top and wrist cameras and was told
    'Pick up the brick.' It runs on the laptop's GPU with OpenVINO, at about N ms per action chunk
    (RESULTS.md)."
 3. **Show and inspect:** "A script holds the brick at a fixed pose and turns it through three
@@ -150,6 +150,17 @@ To use ACT for the pick: add `--pick-model <ACT name> --pick-device NPU`.
   matches the GPU (17 vs 15 ms). The bench table shows every model on every device.
 - *What about uncertain detections?* Three stops, a second look at unsure ones, reject if still unsure. The
   bands come from held-out good photos and real defects (`calibrate_bands.py`).
+
+### Which part of the dashboard proves what
+
+| Dashboard part | Criterion | Point at it when |
+|---|---|---|
+| Pipeline bar (Perceive → … → Optimize), lit stages, device and latency per stage | Closed loop, OpenVINO | Opening: "one system, every model on this laptop" |
+| Inspection camera with the live heatmap; stop tiles with heatmaps; score bar | Anomalib | The judge's scribble lights up |
+| Verdict → "Task sent to …" with the sentence | Detection reaching the VLA | Every verdict: the sentence changes, and so does the plate |
+| Policy plan (measured vs planned joints, ms per plan, asynchronous) | VLA, efficiency | "It plans 1.7 s of motion in about 120–210 ms on the GPU, while the arm keeps moving" |
+| On this laptop: GPU / NPU / CPU load, temperature, measured placement | OpenVINO, efficiency | "Device per model, measured: Anomalib 18 ms on the GPU vs 184 on the NPU" |
+| Last bricks with ✓ / ✗, and the corner number | Task success | The end: "sorted correctly N of M, X s per brick" |
 
 ## 6. When something goes wrong
 

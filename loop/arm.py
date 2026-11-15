@@ -150,9 +150,14 @@ class Arm:
     stop: threading.Event = field(default_factory=threading.Event)
     limits: MoveLimits = field(default_factory=MoveLimits)
     last_command: np.ndarray | None = None
+    moving: bool = False  # True during a scripted move (the dashboard shows it)
+    on_joints: object = None  # optional callback(joints) for the dashboard's joint trace
 
     def joints(self) -> np.ndarray:
-        return np.asarray(self.robot.get_observation().joint_positions, dtype=np.float32)
+        joints = np.asarray(self.robot.get_observation().joint_positions, dtype=np.float32)
+        if self.on_joints is not None:
+            self.on_joints(joints)
+        return joints
 
     def take_over(self, command: np.ndarray | None) -> None:
         """Hand-over from the policy: remember the last action it sent, which the servos still hold.
@@ -194,6 +199,13 @@ class Arm:
         scripted move to the next has no step in the servos' goal. Returns the measured joints at
         the end. Raises Stopped or ArmError after commanding a hold.
         """
+        self.moving = True
+        try:
+            return self._move_to(target, speed, check_lag)
+        finally:
+            self.moving = False
+
+    def _move_to(self, target: np.ndarray, speed: float | None, check_lag: bool) -> np.ndarray:
         limits = self.limits
         start = self._start()
         target = np.asarray(target, dtype=np.float32)

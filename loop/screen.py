@@ -37,6 +37,7 @@ class Photo:
     label: str = ""
     ms: float | None = None
     name: str = ""
+    second: bool = False
 
 
 @dataclass
@@ -62,6 +63,11 @@ class View:
     message: str = ""
     live: np.ndarray | None = None
     live_label: str = ""
+    narration: str = ""
+    stops_planned: list = field(default_factory=list)
+    stops: list = field(default_factory=list)
+    early_reject: bool = False
+    verdict_sub: str = ""
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def set(self, **changes) -> None:

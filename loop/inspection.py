@@ -65,6 +65,9 @@ class InspectionCamera:
         cx, cy = self.cfg.box_center or (self.cfg.width // 2, self.cfg.height // 2)
         return int(cx), int(cy), int(self.cfg.box_size)
 
+    def crop(self, frame: np.ndarray) -> np.ndarray:
+        return crop_box(frame, self.cfg)
+
     def close(self) -> None:
         self._running = False
         self._thread.join(timeout=1)
@@ -93,6 +96,9 @@ class ReplayInspectionCamera:
         h, w = cv2.imread(str(self.paths[0])).shape[:2]
         return w // 2, h // 2, min(w, h)
 
+    def crop(self, frame: np.ndarray) -> np.ndarray:
+        return frame  # replayed photos are crops already
+
     def close(self) -> None:
         pass
 
@@ -104,12 +110,62 @@ class Scorer:
         self.detector = Detector(model_xml, device)
         self.device = device
         self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="anomalib")
+        self.pending = 0  # photos queued or being scored (the live scorer waits while > 0)
+        self._plock = threading.Lock()
         # Warm up so the first real photo isn't slowed by lazy initialisation.
         h, w = self.detector.input_hw or (256, 256)
         self.detector.score(np.zeros((h, w, 3), np.uint8))
 
     def submit(self, crop: np.ndarray) -> Future:
-        return self.pool.submit(self.detector.score, crop)
+        with self._plock:
+            self.pending += 1
+        future = self.pool.submit(self.detector.score, crop)
+        future.add_done_callback(self._done)
+        return future
+
+    def _done(self, _future: Future) -> None:
+        with self._plock:
+            self.pending -= 1
 
     def close(self) -> None:
         self.pool.shutdown(wait=False, cancel_futures=True)
+
+
+class LiveScorer:
+    """Scores the live inspection feed for the dashboard while the brick is shown.
+
+    It only feeds the screen: the verdict uses the stop photos alone. It has its own model copy
+    and only runs while the stop scorer is idle, so it never delays a decision. While the arm
+    moves the frames are blurred, so the dashboard labels those scores "arm moving".
+    """
+
+    def __init__(self, model_xml: Path, device: str, camera, scorer: Scorer, telemetry, bands_fn, active_fn,
+                 moving_fn, hz: float = 8.0) -> None:
+        from detector import label
+
+        self._label = label
+        self.detector = Detector(model_xml, device)
+        self.camera, self.scorer, self.telemetry = camera, scorer, telemetry
+        self.bands_fn, self.active_fn, self.moving_fn = bands_fn, active_fn, moving_fn
+        self.period = 1 / hz
+        self.running = True
+        self.thread = threading.Thread(target=self._run, daemon=True, name="live-scorer")
+        self.thread.start()
+
+    def _run(self) -> None:
+        while self.running:
+            t0 = time.monotonic()
+            try:
+                if self.active_fn() and self.scorer.pending == 0:
+                    frame = self.camera.latest()
+                    if frame is not None:
+                        crop = self.camera.crop(frame)
+                        if self.detector.input_hw is None or crop.shape[:2] == self.detector.input_hw:
+                            score, heat, _ = self.detector.score(crop)
+                            self.telemetry.put_live(score, self._label(score, self.bands_fn()), self.moving_fn(), heat)
+            except Exception:  # noqa: BLE001  (the screen must never take the loop down)
+                pass
+            time.sleep(max(0.0, self.period - (time.monotonic() - t0)))
+
+    def close(self) -> None:
+        self.running = False
