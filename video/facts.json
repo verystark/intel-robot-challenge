@@ -54,7 +54,7 @@
     "family": "pi0.5",
     "training": "8 H100s on Modal, 4 epochs, 5,116 steps, no validation split, image augmentation off",
     "chunk_ms_gpu": 240,
-    "chunk_ms_source": "median of per-stage inference_ms over 97 pick and sort stages on the arm, same runs"
+    "chunk_ms_source": "median of per-stage inference_ms over 125 pick and sort stages on the arm (237 ms)"
   },
   "inspection": {
     "crop": "360 px square around the brick, found by colour at the red finger tips",
@@ -70,8 +70,8 @@
     "train_photos": 641,
     "train_photos_at_show_pose": 72,
     "held_out": "28 photos at the two stops (14 clean, 14 defective): scores don't overlap (lowest defective 0.588, highest good 0.491)",
-    "ms_gpu_loop": 34,
-    "ms_gpu_loop_p95": 60,
+    "ms_gpu_loop": 35,
+    "ms_gpu_loop_p95": 61,
     "ms_cpu": 36,
     "ms_npu": 119,
     "ms_cpu_npu_note": "short run while the loop was running: re-measure on a quiet laptop",
@@ -97,38 +97,39 @@
   },
   "results": {
     "runs": [
-      "loop/runs/20261114_222338",
-      "loop/runs/20261114_224325 (cycles 1-85)"
+      "loop/runs/20261114_222338 (all cycles)",
+      "loop/runs/20261114_224325 (cycles 1-105)"
     ],
     "model": "Pi0.5-v2-8gpu",
-    "bricks_through_loop": 41,
-    "verdicts_correct": 38,
+    "bricks_through_loop": 52,
+    "verdicts_correct": 48,
     "defective_rejected": [
-      13,
-      13
+      16,
+      16
     ],
     "clean_accepted": [
-      25,
-      28
+      32,
+      36
     ],
-    "picks_ok": 41,
-    "pick_attempts": 55,
-    "pick_timeouts": 14,
+    "picks_ok": 52,
+    "pick_attempts": 73,
+    "pick_timeouts": 21,
     "picks_stopped_by_operator": 6,
-    "median_cycle_s": 20.2,
-    "median_pick_s": 7.6,
+    "median_cycle_s": 20.4,
+    "median_pick_s": 7.5,
     "median_inspect_s": 3.9,
     "median_sort_s": 5.7,
     "thermal": "33-minute run: 52 °C mean, 91 °C peak package temperature (loop/runs/20261114_214941)",
     "failures": [
-      "PICK.MISS: 14 of 55 pick attempts timed out; the top camera moved about 20 px after recording and pi0.5 was trained without image augmentation",
-      "INSP.FALSE: 3 clean bricks rejected: a long curved brick held by its end (twice) and a tall brick, views the good photos barely contain",
-      "INSP.MARGIN: dark marker on a blue brick scored 0.55 to 0.68, close to the limit; the second look decided",
+      "PICK.MISS: 21 of 73 pick attempts timed out; the top camera moved about 20 px after recording and pi0.5 was trained without image augmentation",
+      "INSP.FALSE: 4 clean bricks rejected: a green curved brick (3 times) and a tall yellow brick, shapes the good photos barely contain",
+      "INSP.MARGIN: dark marker on blue bricks scored lowest of the defects (0.55 to 0.77); the lowest was rejected only after its second look",
       "INSP.FACES: only the two ungripped faces are checked",
-      "GRIP.SENSE: the soft gripper reads the same holding a brick or not; an empty grasp is only caught at inspection"
+      "GRIP.SENSE: the soft gripper reads the same holding a brick or not; an empty grasp is only caught at inspection",
+      "SORT.LOG: the loop logs each verdict and that the sort finished, not where the brick landed"
     ],
-    "placements_checked": null,
+    "placements_checked": "not logged",
     "verdicts_checked": "every photo checked by eye",
-    "_source": "JUNCTION_SUBMISSION_TEXT_V2.md; recounted 23:30 (picks 41 done / 14 timeout / 6 stopped up to cycle 85). Recount at the end: the run is still going"
+    "_source": "JUNCTION_SUBMISSION_FINAL.md (frozen at cycle 105 of the 22:43 run; recounted from cycles.jsonl at 23:40; verdicts checked by eye from the photos)"
   }
 }

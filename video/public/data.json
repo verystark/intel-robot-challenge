@@ -56,7 +56,7 @@
       "family": "pi0.5",
       "training": "8 H100s on Modal, 4 epochs, 5,116 steps, no validation split, image augmentation off",
       "chunk_ms_gpu": 240,
-      "chunk_ms_source": "median of per-stage inference_ms over 97 pick and sort stages on the arm, same runs"
+      "chunk_ms_source": "median of per-stage inference_ms over 125 pick and sort stages on the arm (237 ms)"
     },
     "inspection": {
       "crop": "360 px square around the brick, found by colour at the red finger tips",
@@ -72,8 +72,8 @@
       "train_photos": 641,
       "train_photos_at_show_pose": 72,
       "held_out": "28 photos at the two stops (14 clean, 14 defective): scores don't overlap (lowest defective 0.588, highest good 0.491)",
-      "ms_gpu_loop": 34,
-      "ms_gpu_loop_p95": 60,
+      "ms_gpu_loop": 35,
+      "ms_gpu_loop_p95": 61,
       "ms_cpu": 36,
       "ms_npu": 119,
       "ms_cpu_npu_note": "short run while the loop was running: re-measure on a quiet laptop",
@@ -99,39 +99,40 @@
     },
     "results": {
       "runs": [
-        "loop/runs/20261114_222338",
-        "loop/runs/20261114_224325 (cycles 1-85)"
+        "loop/runs/20261114_222338 (all cycles)",
+        "loop/runs/20261114_224325 (cycles 1-105)"
       ],
       "model": "Pi0.5-v2-8gpu",
-      "bricks_through_loop": 41,
-      "verdicts_correct": 38,
+      "bricks_through_loop": 52,
+      "verdicts_correct": 48,
       "defective_rejected": [
-        13,
-        13
+        16,
+        16
       ],
       "clean_accepted": [
-        25,
-        28
+        32,
+        36
       ],
-      "picks_ok": 41,
-      "pick_attempts": 55,
-      "pick_timeouts": 14,
+      "picks_ok": 52,
+      "pick_attempts": 73,
+      "pick_timeouts": 21,
       "picks_stopped_by_operator": 6,
-      "median_cycle_s": 20.2,
-      "median_pick_s": 7.6,
+      "median_cycle_s": 20.4,
+      "median_pick_s": 7.5,
       "median_inspect_s": 3.9,
       "median_sort_s": 5.7,
       "thermal": "33-minute run: 52 \u00b0C mean, 91 \u00b0C peak package temperature (loop/runs/20261114_214941)",
       "failures": [
-        "PICK.MISS: 14 of 55 pick attempts timed out; the top camera moved about 20 px after recording and pi0.5 was trained without image augmentation",
-        "INSP.FALSE: 3 clean bricks rejected: a long curved brick held by its end (twice) and a tall brick, views the good photos barely contain",
-        "INSP.MARGIN: dark marker on a blue brick scored 0.55 to 0.68, close to the limit; the second look decided",
+        "PICK.MISS: 21 of 73 pick attempts timed out; the top camera moved about 20 px after recording and pi0.5 was trained without image augmentation",
+        "INSP.FALSE: 4 clean bricks rejected: a green curved brick (3 times) and a tall yellow brick, shapes the good photos barely contain",
+        "INSP.MARGIN: dark marker on blue bricks scored lowest of the defects (0.55 to 0.77); the lowest was rejected only after its second look",
         "INSP.FACES: only the two ungripped faces are checked",
-        "GRIP.SENSE: the soft gripper reads the same holding a brick or not; an empty grasp is only caught at inspection"
+        "GRIP.SENSE: the soft gripper reads the same holding a brick or not; an empty grasp is only caught at inspection",
+        "SORT.LOG: the loop logs each verdict and that the sort finished, not where the brick landed"
       ],
-      "placements_checked": null,
+      "placements_checked": "not logged",
       "verdicts_checked": "every photo checked by eye",
-      "_source": "JUNCTION_SUBMISSION_TEXT_V2.md; recounted 23:30 (picks 41 done / 14 timeout / 6 stopped up to cycle 85). Recount at the end: the run is still going"
+      "_source": "JUNCTION_SUBMISSION_FINAL.md (frozen at cycle 105 of the 22:43 run; recounted from cycles.jsonl at 23:40; verdicts checked by eye from the photos)"
     }
   },
   "numbers": {
@@ -147,22 +148,22 @@
     "I": null,
     "S": null,
     "E": null,
-    "X": 20.2,
-    "BRICKS": 41,
-    "VERDICTS_OK": 38,
-    "DEF_REJ": 13,
-    "DEF_TOTAL": 13,
-    "CLEAN_OK": 25,
-    "CLEAN_TOTAL": 28,
-    "FALSE_REJ": 3,
-    "PICKS_OK": 41,
-    "PICK_ATTEMPTS": 55,
-    "CYCLE_S": 20.2,
-    "PICK_S": 7.6,
+    "X": 20.4,
+    "BRICKS": 52,
+    "VERDICTS_OK": 48,
+    "DEF_REJ": 16,
+    "DEF_TOTAL": 16,
+    "CLEAN_OK": 32,
+    "CLEAN_TOTAL": 36,
+    "FALSE_REJ": 4,
+    "PICKS_OK": 52,
+    "PICK_ATTEMPTS": 73,
+    "CYCLE_S": 20.4,
+    "PICK_S": 7.5,
     "INSPECT_S": 3.9,
     "SORT_S": 5.7,
     "VLA_MS": 240,
-    "INSPECT_MS_LOOP": 34,
+    "INSPECT_MS_LOOP": 35,
     "INSPECT_MS_CPU": 36,
     "INSPECT_MS_NPU": 119
   },
@@ -4636,6 +4637,117 @@
           "pkg_w": null,
           "battery_w": null
         }
+      },
+      {
+        "cycle": 104,
+        "start": "2026-11-14 23:32:32",
+        "home_before_pick_s": 0.85,
+        "pick": {
+          "result": "timeout",
+          "s": 20.03,
+          "inference_ms": {
+            "n": 22,
+            "median": 236.6,
+            "p95": 242.4,
+            "max": 242.8
+          },
+          "clamped_ticks": 0
+        }
+      },
+      {
+        "cycle": 105,
+        "start": "2026-11-14 23:33:42",
+        "home_before_pick_s": 3.02,
+        "pick": {
+          "result": "done",
+          "s": 7.51,
+          "inference_ms": {
+            "n": 7,
+            "median": 264.3,
+            "p95": 271.8,
+            "max": 272.1
+          },
+          "clamped_ticks": 0
+        },
+        "grip": 3.1,
+        "inspect": {
+          "stops": [
+            {
+              "deg": 90.0,
+              "back": false,
+              "scores": [
+                0.2151,
+                0.2217,
+                0.2458
+              ],
+              "median": 0.2217,
+              "label": "GOOD"
+            },
+            {
+              "deg": -90.0,
+              "back": false,
+              "scores": [
+                0.2664,
+                0.2515,
+                0.27
+              ],
+              "median": 0.2664,
+              "label": "GOOD"
+            }
+          ],
+          "early_reject": false,
+          "second_look": false,
+          "anomaly_ms": [
+            57.4,
+            39.7,
+            41.8,
+            44.0,
+            43.3,
+            40.8
+          ],
+          "verdict": "GOOD",
+          "device": "GPU",
+          "bands": [
+            0.45,
+            0.56
+          ],
+          "scores": [
+            0.2217,
+            0.2664
+          ],
+          "labels": [
+            "GOOD",
+            "GOOD"
+          ],
+          "stops_deg": [
+            90.0,
+            -90.0
+          ]
+        },
+        "show_s": 1.35,
+        "inspect_s": 3.84,
+        "home_s": 1.19,
+        "sort": {
+          "result": "done",
+          "sentence": "The brick is good. Put it on the green plate.",
+          "s": 5.16,
+          "inference_ms": {
+            "n": 5,
+            "median": 241.4,
+            "p95": 246.8,
+            "max": 247.2
+          },
+          "clamped_ticks": 0
+        },
+        "total_s": 22.11,
+        "system": {
+          "pkg_temp_c": 58.0,
+          "cpu_pct": 25.4,
+          "gpu_pct": 96.8,
+          "npu_pct": 0.0,
+          "pkg_w": null,
+          "battery_w": null
+        }
       }
     ],
     "images": [
@@ -4978,6 +5090,14 @@
       {
         "photo": "inspect/c103_90deg.jpg",
         "heat": "inspect/c103_90deg_heat.jpg"
+      },
+      {
+        "photo": "inspect/c105_-90deg.jpg",
+        "heat": "inspect/c105_-90deg_heat.jpg"
+      },
+      {
+        "photo": "inspect/c105_90deg.jpg",
+        "heat": "inspect/c105_90deg_heat.jpg"
       }
     ],
     "sim": false,
@@ -5060,8 +5180,5 @@
   },
   "trials": [],
   "layout": null,
-  "draft": [
-    "no footage of the run yet",
-    "inspection CPU / NPU latency measured while the loop ran"
-  ]
+  "draft": []
 }

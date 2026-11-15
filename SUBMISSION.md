@@ -2,8 +2,8 @@
 
 What Junction's form asks for, what we put in each field, and how we make the video.
 
-> **The paste-ready text for every field is in [JUNCTION_SUBMISSION_TEXT_V2.md](JUNCTION_SUBMISSION_TEXT_V2.md)** (pi0.5,
-> measured on the arm). Sections 2 and 3 below are earlier drafts; where they differ, V2 wins. The form as
+> **The final text for every field is in [JUNCTION_SUBMISSION_FINAL.md](JUNCTION_SUBMISSION_FINAL.md)** (pi0.5, measured
+> on the arm, no placeholders). Sections 2 and 3 below are earlier drafts; where they differ, FINAL wins. The form as
 pasted is in [JUNCTION_SUBMISSION_FORM.md](JUNCTION_SUBMISSION_FORM.md). The demo plan is in
 [PLAN_AND_SHOW.md](PLAN_AND_SHOW.md).
 
