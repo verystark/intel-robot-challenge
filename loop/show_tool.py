@@ -23,10 +23,10 @@ run `save --name home`. Without it, run_cell.py uses the median start of the sor
 Collect mode: the tool moves to the show pose and opens the gripper. Put a brick between the
 jaws, gripped the way the robot grips it, then type g (good, training), t (good, test only) or
 b (defective) and Enter. The tool closes the gripper and takes one photo at every wrist stop of
-cell_config.json (0, 90 and 180 deg, as far as the wrist's range allows, planned exactly as
-run_cell.py plans them), then turns back and opens the gripper. Anomalib must have seen every
+cell_config.json (0, 90, 180, then back through 90 to 0 deg, as far as the wrist's range allows,
+planned exactly as run_cell.py plans them), then opens the gripper. Anomalib must have seen every
 stop in training, or that view scores as defective. Photos go to anomaly/dataset/<folder>
-(crop, named ..._a<degrees>.png) and anomaly/dataset_full/<folder> (full frame), like
+(crop, named ..._a<degrees>.png, ..._a<degrees>b.png on the way back) and anomaly/dataset_full/<folder> (full frame), like
 capture.py, so recrop.py works. Close capture.py and inspect_live.py first: one program per camera.
 """
 
@@ -209,7 +209,7 @@ def cmd_collect(args) -> None:
     camera = InspectionCamera()  # fails early if capture.py holds the webcam
     confirm()
     arm, locks = connect(args)
-    dataset, full = REPO / "anomaly" / "dataset", REPO / "anomaly" / "dataset_full"
+    dataset, full = REPO / args.dataset, REPO / f"{args.dataset}_full"
     counts = {folder: len(list((dataset / folder).glob("*.png"))) for folder in FOLDERS.values()}
     try:
         show = poses["show"].copy()
@@ -241,7 +241,7 @@ def cmd_collect(args) -> None:
                 views.append((stop, frame, crop))
             arm.move_to(base, speed=90)
             for stop, frame, crop in views:
-                name = f"{folder}_{stamp}_a{stop.deg:.0f}"
+                name = f"{folder}_{stamp}_a{stop.tag}"
                 (dataset / folder).mkdir(parents=True, exist_ok=True)
                 (full / folder).mkdir(parents=True, exist_ok=True)
                 cv2.imwrite(str(dataset / folder / f"{name}.png"), crop)
@@ -270,6 +270,8 @@ def main() -> None:
     p = sub.add_parser("test-turn", help="at the show pose, visit each wrist stop and come back")
     p.add_argument("--speed", type=float, default=30.0)
     p = sub.add_parser("collect", help="inspection photos at the show pose")
+    p.add_argument("--dataset", default="anomaly/dataset",
+                   help="where photos go (crops; full frames in <dataset>_full), e.g. anomaly/dataset_show")
     p.add_argument("--speed", type=float, default=40.0)
     args = parser.parse_args()
     {"where": cmd_where, "save": cmd_save, "goto": cmd_goto, "test-turn": cmd_test_turn,

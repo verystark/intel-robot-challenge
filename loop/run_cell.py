@@ -4,8 +4,8 @@ Each cycle:
   0. HOME     If the arm isn't at the home pose, a scripted move there (the pick episodes start there).
   1. PICK     The pick policy, "Pick up the brick.", until the arm has gone out, come back and held still.
   2. SHOW     Scripted: smooth move to the saved show pose (loop/poses.json).
-  3. INSPECT  Photos at wrist stops 0, 90 and 180 deg (as far as the wrist's range allows), 3 frames
-              each; a stop's score is the median of its frames. Each stop is scored on the GPU while
+  3. INSPECT  Photos at wrist stops 0, 90, 180, then back through 90 to 0 deg (as far as the wrist's
+              range allows), 3 frames each; a stop's score is the median of its frames. Each stop is scored on the GPU while
               the wrist turns to the next. Any stop clearly defective -> DEFECTIVE at once; all clearly
               good -> GOOD; otherwise a second look at the unsure stops; still unsure -> DEFECTIVE.
   4. HOME     Scripted move back to the home pose, where the sort episodes start.
@@ -249,6 +249,8 @@ class Cell:
                                         callbacks=[self.watcher])
             self.watcher.runtime = self.runtime
             self.runtime.connect()
+            if not args.sim:
+                self._check_cameras(cameras)
             policy_name = (f"Pick: {names['pick']}  |  Sort: {names['sort']}" if names["pick"] != names["sort"]
                            else f"Policy: {names['pick']}")
         else:
@@ -301,10 +303,28 @@ class Cell:
 
         c = self.cfg["cameras"]
         size = {"width": c["width"], "height": c["height"], "fps": c["fps"]}
+        # The wrist camera is found by its USB serial, as Studio does (stable across reboots). The
+        # "v4l2" backend opened it but never received a frame, so the default backend is used.
+        wrist = c["wrist"]
+        wrist_device = {"serial": wrist["serial"]} if "serial" in wrist else wrist["device"]
         return {
             "top": RealSenseCamera(serial_number=c["top"]["serial_number"], **size),
-            "wrist": UVCCamera(device=c["wrist"]["device"], backend="v4l2", **size),
+            "wrist": UVCCamera(device=wrist_device, **size),
         }
+
+    def _check_cameras(self, cameras: dict, timeout_s: float = 3.0) -> None:
+        """Fail before the arm moves if a policy camera sends no frames."""
+        for name, cam in cameras.items():
+            deadline = time.monotonic() + timeout_s
+            while True:
+                try:
+                    cam.read_latest()
+                    break
+                except Exception as error:  # noqa: BLE001
+                    if time.monotonic() > deadline:
+                        raise RuntimeError(f"The {name} camera sends no frames ({error}). Is another program "
+                                           "using it? Replug it or restart Studio's backend.") from error
+                    time.sleep(0.05)
 
     # --- Helpers ---------------------------------------------------------------------
 
@@ -422,7 +442,7 @@ class Cell:
         ms = [o[2] for o in out]
         self.all_anomaly_ms.extend(ms)
         entry.update(scores=scores, median=median, label=label(median, self.bands), ms=ms)
-        self.ev(3, f"INSP.{entry['stop'].name.replace(' deg', '')}DEG",
+        self.ev(3, f"INSP.{entry['stop'].tag.upper()}DEG",
                 f"Score {median:.2f} (median of {len(scores)}) → {entry['label']}")
         crop = entry["crops"][i]
         photos[entry["index"]] = Photo(crop=crop, heat_overlay=heatmap_overlay(crop, out[i][1]), score=median,
@@ -433,7 +453,7 @@ class Cell:
         return entry["label"]
 
     def show_and_inspect(self) -> tuple[str, list[Photo], dict]:
-        """Show pose, then photos at each stop (0, 90, 180 deg by default).
+        """Show pose, then photos at each stop (0, 90, 180, 90, 0 deg by default: out and back).
 
         Each stop's frames are scored on the anomaly device while the wrist turns to the next
         stop. Any stop clearly defective -> DEFECTIVE at once (the remaining stops are skipped).
@@ -462,9 +482,11 @@ class Cell:
 
         def say_stop(k: int, stop: Stop) -> None:
             ms = f" in about {np.median(self.all_anomaly_ms[-30:]):.0f} ms per photo" if self.all_anomaly_ms else ""
-            self.step_detail = f"VIEW {k + 1}/{len(stops)} @ {stop.deg:.0f}°"
+            back = " back" if stop.back else ""
+            self.step_detail = f"VIEW {k + 1}/{len(stops)} @ {stop.deg:.0f}°{back}"
             self.view.set(narration=f"Inspecting the brick: view {k + 1} of {len(stops)} "
-                                    f"({stop.deg:.0f}°). Anomalib scores 3 photos on the {device}{ms}.")
+                                    f"({stop.deg:.0f}°{', rolling back' if stop.back else ''}). "
+                                    f"Anomalib scores 3 photos on the {device}{ms}.")
 
         def at(stop: Stop) -> np.ndarray:
             target = show.copy()
@@ -516,9 +538,10 @@ class Cell:
             else:
                 result = DEFECTIVE
                 self.say("Still unsure: rejecting it (defective)")
-        self.arm.move_to(show, speed=speed)  # wrist back before moving on
+        if self.arm.last_command is None or not np.allclose(self.arm.last_command, show, atol=0.5):
+            self.arm.move_to(show, speed=speed)  # wrist back before moving on (already there after a 0 back stop)
         info = {
-            "stops": [{"deg": round(e["stop"].deg, 1), "scores": [round(x, 4) for x in e["scores"]],
+            "stops": [{"deg": round(e["stop"].deg, 1), "back": e["stop"].back, "scores": [round(x, 4) for x in e["scores"]],
                        "median": round(e["median"], 4), "label": e["label"],
                        **({"first_median": round(e["first_median"], 4)} if "first_median" in e else {})}
                       for e in entries],

@@ -210,23 +210,32 @@ def render(view: View) -> np.ndarray:
     _text(img, f'"{v.sentence}"' if v.sentence else "-", (rx + 12, 210), 0.62, TEXT, 1)
 
     # Photos with heatmaps
-    py, ps = 236, 232
-    for i in range(3):
-        x = rx + i * (ps + 12)
+    # Three stops fill the row at full size; more (the out-and-back sweep) share it as smaller tiles.
+    py, row = 236, 232
+    n = max(3, len(v.photos), len(v.stops_planned))
+    gap = 12 if n <= 3 else 10
+    ps = min(row, (rw - (n - 1) * gap) // n)
+    for i in range(n):
+        x = rx + i * (ps + gap)
         if i < len(v.photos):
             photo = v.photos[i]
             tile = photo.heat_overlay if photo.heat_overlay is not None else photo.crop
             img[py:py + ps, x:x + ps] = _fit(tile, ps, ps)
             lab_colour = COLOURS.get(photo.label, DIM)
-            cv2.rectangle(img, (x, py + ps), (x + ps, py + ps + 30), lab_colour, -1)
             score = f"{photo.score:.2f}" if photo.score is not None else "scoring..."
-            _text(img, f"{photo.name or f'view {i + 1}'}: {score} {photo.label}", (x + 6, py + ps + 21), 0.5,
-                  (255, 255, 255), 1)
+            name = photo.name or f"view {i + 1}"
+            if n <= 3:
+                cv2.rectangle(img, (x, py + ps), (x + ps, py + ps + 30), lab_colour, -1)
+                _text(img, f"{name}: {score} {photo.label}", (x + 6, py + ps + 21), 0.5, (255, 255, 255), 1)
+            else:  # narrow tiles: name and score on two lines
+                cv2.rectangle(img, (x, py + ps), (x + ps, py + ps + 44), lab_colour, -1)
+                _text(img, name, (x + 6, py + ps + 18), 0.45, (255, 255, 255), 1)
+                _text(img, f"{score} {photo.label}", (x + 6, py + ps + 37), 0.45, (255, 255, 255), 1)
         else:
             cv2.rectangle(img, (x, py), (x + ps, py + ps), PANEL, -1)
 
-    # Score bar
-    by, bx0, bx1 = py + ps + 58, rx + 10, rx + rw - 10
+    # Score bar (fixed height below the photo row, whatever the tile size)
+    by, bx0, bx1 = py + row + 58, rx + 10, rx + rw - 10
     low, high = v.bands
     def xof(s: float) -> int:
         return int(bx0 + (bx1 - bx0) * min(max(s, 0.0), 1.0))

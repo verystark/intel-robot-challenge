@@ -1,0 +1,22 @@
+{
+  "show": {
+    "joints": [
+      -8.28,
+      -82.16,
+      99.55,
+      -7.41,
+      7.07,
+      2.69
+    ],
+    "joint_names": [
+      "shoulder_pan",
+      "shoulder_lift",
+      "elbow_flex",
+      "wrist_flex",
+      "wrist_roll",
+      "gripper"
+    ],
+    "saved": "2026-11-14 17:58:57",
+    "note": "set by the team at the station, 17:58"
+  }
+}

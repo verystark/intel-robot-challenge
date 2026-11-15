@@ -167,7 +167,7 @@ function renderVerdict(s) {
   const key = JSON.stringify([s.tiles, s.stops, s.stops_planned, s.early_reject]);
   if (key !== lastTilesKey) {
     lastTilesKey = key;
-    const planned = s.stops_planned.length ? s.stops_planned : ["0 deg", "90 deg", "180 deg"];
+    const planned = s.stops_planned.length ? s.stops_planned : ["0 deg", "90 deg", "180 deg", "90 deg back", "0 deg back"];
     $("stops").innerHTML = planned.map((name, i) => {
       const st = s.stops[i];
       if (st) {

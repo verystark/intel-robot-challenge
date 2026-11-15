@@ -98,21 +98,33 @@ def roll_target(current_roll: float, degrees: float, units_per_deg: float) -> fl
 
 @dataclass
 class Stop:
-    """One inspection stop: the angle asked for, the angle the wrist can really reach, its roll target."""
+    """One inspection stop: the angle asked for, the angle the wrist can really reach, its roll target.
+
+    `back` marks a stop on the return sweep (an angle after a larger one), e.g. the second 90 in
+    0, 90, 180, 90, 0. It has the same roll target as its forward twin but its own name.
+    """
 
     asked_deg: float
     deg: float
     roll: float
+    back: bool = False
 
     @property
     def name(self) -> str:
-        return f"{self.deg:.0f} deg"  # plain ASCII: OpenCV's screen font has no degree sign
+        # plain ASCII: OpenCV's screen font has no degree sign
+        return f"{self.deg:.0f} deg" + (" back" if self.back else "")
+
+    @property
+    def tag(self) -> str:
+        """Short id for event tags and file names, e.g. 90 or 90b."""
+        return f"{self.deg:.0f}" + ("b" if self.back else "")
 
 
 def plan_stops(show_roll: float, stops_deg: list[float], units_per_deg: float, margin: float = 2.0) -> list[Stop]:
     """Wrist-roll targets for the inspection stops, all turned the same way from the show pose.
 
-    The direction is the one with room for the largest stop; if neither has room (a show pose
+    The stops are visited in the order given, so [0, 90, 180, 90, 0] turns out and rolls back
+    again, photographing on the way back too. The direction is the one with room for the largest stop; if neither has room (a show pose
     with wrist_roll near 0 can't turn a full 180 deg either way), the largest stops are capped
     at the joint's range, e.g. about 173 deg from a roll of -2. run_cell.py and show_tool.py's
     collect mode both use this, so training photos and live photos come from the same angles.
@@ -126,10 +138,11 @@ def plan_stops(show_roll: float, stops_deg: list[float], units_per_deg: float, m
         sign = -1
     else:
         sign = 1 if room_up >= room_down else -1
-    stops = []
+    stops, furthest = [], 0.0
     for asked in stops_deg:
         roll = float(np.clip(show_roll + sign * abs(asked) * units_per_deg, lo, hi))
-        stops.append(Stop(asked, abs(roll - show_roll) / units_per_deg, roll))
+        stops.append(Stop(asked, abs(roll - show_roll) / units_per_deg, roll, back=abs(asked) < furthest))
+        furthest = max(furthest, abs(asked))
     return stops
 
 
